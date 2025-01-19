@@ -1,0 +1,28 @@
+/* 全局样式 */
+@import './transition.css';
+
+/* 主题色变量 */
+:root {
+  --primary-color: #409eff;
+  --success-color: #67c23a;
+  --warning-color: #e6a23c;
+  --danger-color: #f56c6c;
+  --info-color: #909399;
+  
+  --background-color: #f5f7fa;
+  --text-color: #303133;
+  --text-color-secondary: #909399;
+  
+  --border-color: #dcdfe6;
+  --border-color-light: #e4e7ed;
+  --border-radius: 4px;
+}
+
+/* 暗色主题 */
+html.dark {
+  --background-color: #1a1a1a;
+  --text-color: #e5eaf3;
+  --text-color-secondary: #a3a6ad;
+  --border-color: #4c4d4f;
+  --border-color-light: #363637;
+} 
