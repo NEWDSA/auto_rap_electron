@@ -14,22 +14,25 @@
           <h2 class="text-lg font-medium mb-6">基本设置</h2>
           
           <el-form label-position="top">
+            <el-form-item label="系统名称">
+              <el-input v-model="settings.systemName" />
+            </el-form-item>
+
             <el-form-item label="默认浏览器">
-              <el-select v-model="settings.browser" class="w-full">
+              <el-select v-model="settings.defaultBrowser" class="w-full">
                 <el-option label="Chrome" value="chrome" />
-                <el-option label="Firefox" value="firefox" />
                 <el-option label="Edge" value="edge" />
+                <el-option label="Firefox" value="firefox" />
               </el-select>
             </el-form-item>
 
-            <el-form-item label="默认下载目录">
-              <div class="flex space-x-2">
-                <el-input v-model="settings.downloadDir" readonly />
-                <el-button @click="selectDirectory">
-                  <el-icon><Folder /></el-icon>
-                  选择目录
-                </el-button>
-              </div>
+            <el-form-item label="并发任务数">
+              <el-input-number
+                v-model="settings.maxConcurrentTasks"
+                :min="1"
+                :max="10"
+                class="w-32"
+              />
             </el-form-item>
 
             <el-form-item label="自动保存间隔（分钟）">
@@ -67,15 +70,6 @@
                 type="textarea"
                 rows="3"
                 placeholder="每行一个参数"
-              />
-            </el-form-item>
-
-            <el-form-item label="并发任务数">
-              <el-input-number
-                v-model="settings.maxConcurrentTasks"
-                :min="1"
-                :max="10"
-                class="w-32"
               />
             </el-form-item>
 
@@ -174,15 +168,12 @@ import { ElMessageBox } from 'element-plus'
 
 // 设置数据
 const settings = ref({
-  // 基本设置
-  browser: 'chrome',
-  downloadDir: 'C:\\Downloads',
+  systemName: 'AutoRAP',
+  defaultBrowser: 'chrome',
+  maxConcurrentTasks: 3,
   autoSaveInterval: 5,
   autoUpdate: true,
-
-  // 高级设置
   browserArgs: '',
-  maxConcurrentTasks: 3,
   timeout: 30,
   proxy: '',
   headless: false,
@@ -272,7 +263,7 @@ const saveSettings = () => {
 }
 </script>
 
-<style scoped>
+<style lang="postcss" scoped>
 .settings-tabs :deep(.el-tabs__item) {
   @apply h-12;
 }

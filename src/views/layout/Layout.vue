@@ -62,7 +62,7 @@
           <!-- 底部折叠按钮 -->
           <div class="flex justify-center items-center h-12 border-t dark:border-gray-700">
             <el-button
-              type="text"
+              type="link"
               class="!h-full w-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               @click="isCollapse = !isCollapse"
             >
@@ -113,7 +113,7 @@ const handleSelect = (index: string) => {
 }
 </script>
 
-<style scoped>
+<style lang="postcss" scoped>
 .el-container {
   @apply h-full;
 }

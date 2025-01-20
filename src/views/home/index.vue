@@ -107,7 +107,7 @@ const quickActions = [
 ]
 </script>
 
-<style scoped>
+<style lang="postcss">
 .home-container {
   @apply p-6 w-full max-w-7xl mx-auto;
 }

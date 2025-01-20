@@ -1,4 +1,5 @@
-import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 import Layout from '@/views/layout/Layout.vue'
 
 const routes: RouteRecordRaw[] = [
@@ -13,7 +14,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/home/index.vue'),
         meta: {
           title: '首页',
-          icon: 'HomeFilled'
+          icon: 'House'
         }
       },
       {

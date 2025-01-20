@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -10,13 +10,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   send: (channel: string, data: any) => {
     ipcRenderer.send(channel, data)
   },
-  on: (channel: string, callback: Function) => {
-    ipcRenderer.on(channel, (_, ...args) => callback(...args))
+  on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
+    ipcRenderer.on(channel, callback)
   },
-  once: (channel: string, callback: Function) => {
-    ipcRenderer.once(channel, (_, ...args) => callback(...args))
+  once: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
+    ipcRenderer.once(channel, callback)
   },
-  removeListener: (channel: string, callback: Function) => {
+  removeListener: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
     ipcRenderer.removeListener(channel, callback)
   },
 
