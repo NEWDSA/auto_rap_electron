@@ -57,7 +57,7 @@ export interface LogicFlowEvents {
 
 export interface LogicFlowApi {
   render: () => void
-  dispose: () => void
+  destroy: () => void
   on: <K extends keyof LogicFlowEvents>(event: K, callback: (data: LogicFlowEvents[K]) => void) => void
   off: <K extends keyof LogicFlowEvents>(event: K) => void
   register: (config: any) => void

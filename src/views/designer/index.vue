@@ -6,52 +6,59 @@
         <div class="flex items-center space-x-4">
           <!-- 流程名称 -->
           <div class="flex items-center space-x-2">
-            <el-icon><Document /></el-icon>
+            <el-icon>
+              <Document />
+            </el-icon>
             <span class="text-gray-600">流程名称</span>
           </div>
-          <el-input
-            v-model="flowName"
-            placeholder="请输入流程名称"
-            class="!w-64"
-          />
+          <el-input v-model="flowName" placeholder="请输入流程名称" class="!w-64" />
         </div>
 
         <!-- 操作按钮 -->
         <div class="flex items-center space-x-4">
           <el-button-group>
             <el-tooltip content="撤销" placement="bottom">
-              <el-button @click="handleUndo" :disabled="!canUndo">
-                <el-icon><ArrowLeft /></el-icon>
+              <el-button type="primary" plain @click="handleUndo" :disabled="!canUndo">
+                <el-icon>
+                  <ArrowLeft />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip content="重做" placement="bottom">
-              <el-button @click="handleRedo" :disabled="!canRedo">
-                <el-icon><ArrowRight /></el-icon>
+              <el-button type="primary" plain @click="handleRedo" :disabled="!canRedo">
+                <el-icon>
+                  <ArrowRight />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
-
-      <el-button-group>
+          <el-button-group>
             <el-tooltip content="保存流程" placement="bottom">
               <el-button type="primary" @click="handleSave">
-        <el-icon><Document /></el-icon>
-        </el-button>
+                <el-icon>
+                  <Document />
+                </el-icon>
+              </el-button>
             </el-tooltip>
             <el-tooltip content="运行" placement="bottom">
               <el-button type="success" @click="handleRun">
-          <el-icon><VideoPlay /></el-icon>
-        </el-button>
+                <el-icon>
+                  <VideoPlay />
+                </el-icon>
+              </el-button>
             </el-tooltip>
             <el-tooltip content="停止" placement="bottom">
               <el-button type="warning" @click="handleStop">
-                <el-icon><VideoPause /></el-icon>
-        </el-button>
+                <el-icon>
+                  <VideoPause />
+                </el-icon>
+              </el-button>
             </el-tooltip>
-      </el-button-group>
+          </el-button-group>
         </div>
       </div>
     </div>
-    
+
     <!-- 主设计区域 -->
     <div class="flex-1 flex">
       <!-- 左侧组件面板 -->
@@ -59,26 +66,25 @@
         <div class="p-4 border-b dark:border-gray-700">
           <h3 class="text-lg font-medium">组件列表</h3>
         </div>
-        
+
         <div class="p-2 space-y-2">
           <!-- 基础组件 -->
           <el-collapse v-model="activeCollapse" class="border-0">
             <el-collapse-item name="basic">
               <template #title>
                 <div class="flex items-center">
-                  <el-icon class="mr-2"><Box /></el-icon>
+                  <el-icon class="mr-2">
+                    <Box />
+                  </el-icon>
                   基础组件
                 </div>
               </template>
               <div class="space-y-2 p-2">
-                <div
-                  v-for="node in basicNodes"
-                  :key="node.type"
-                  class="component-item"
-                  draggable="true"
-                  @dragstart="handleDragStart($event, node)"
-                >
-                  <el-icon><component :is="node.icon" /></el-icon>
+                <div v-for="node in basicNodes" :key="node.type" class="component-item" draggable="true"
+                  @dragstart="handleDragStart($event, node)">
+                  <el-icon>
+                    <component :is="node.icon" />
+                  </el-icon>
                   <span class="ml-2">{{ node.name }}</span>
                 </div>
               </div>
@@ -87,19 +93,18 @@
             <el-collapse-item name="control">
               <template #title>
                 <div class="flex items-center">
-                  <el-icon class="mr-2"><Tools /></el-icon>
+                  <el-icon class="mr-2">
+                    <Tools />
+                  </el-icon>
                   流程控制
                 </div>
               </template>
               <div class="space-y-2 p-2">
-                <div
-                  v-for="node in controlNodes"
-                :key="node.type"
-                  class="component-item"
-                draggable="true"
-                  @dragstart="handleDragStart($event, node)"
-              >
-                <el-icon><component :is="node.icon" /></el-icon>
+                <div v-for="node in controlNodes" :key="node.type" class="component-item" draggable="true"
+                  @dragstart="handleDragStart($event, node)">
+                  <el-icon>
+                    <component :is="node.icon" />
+                  </el-icon>
                   <span class="ml-2">{{ node.name }}</span>
                 </div>
               </div>
@@ -112,19 +117,19 @@
       <div class="flex-1 bg-gray-50 dark:bg-gray-900 relative">
         <!-- 流程图容器 -->
         <div ref="flowContainer" class="w-full h-full" />
-        
+
         <!-- 小地图 -->
         <div class="absolute bottom-4 right-4 bg-white dark:bg-gray-800 rounded shadow-lg">
           <div ref="minimapContainer" class="w-48 h-32" />
-              </div>
-            </div>
+        </div>
+      </div>
 
       <!-- 右侧属性面板 -->
       <div class="w-80 bg-white dark:bg-gray-800 border-l dark:border-gray-700 overflow-hidden">
         <div class="p-4 border-b dark:border-gray-700">
           <h3 class="text-lg font-medium">属性设置</h3>
         </div>
-        
+
         <div class="p-4 overflow-y-auto" style="height: calc(100% - 57px);">
           <template v-if="selectedNode">
             <el-form label-position="top">
@@ -135,22 +140,14 @@
 
               <!-- 节点描述 -->
               <el-form-item label="节点描述">
-                <el-input
-                  v-model="selectedNode.properties.description"
-                  type="textarea"
-                  rows="2"
-                  @change="updateNodeProperty('description')"
-                />
-                </el-form-item>
+                <el-input v-model="selectedNode.properties.description" type="textarea" rows="2"
+                  @change="updateNodeProperty('description')" />
+              </el-form-item>
 
               <!-- 动态属性配置 -->
-              <component
-                :is="getNodeConfigComponent"
-                v-if="getNodeConfigComponent"
-                :node="selectedNode"
-                @update="updateNodeProperty"
-              />
-              </el-form>
+              <component :is="getNodeConfigComponent" v-if="getNodeConfigComponent" :node="selectedNode"
+                @update="updateNodeProperty" />
+            </el-form>
           </template>
           <template v-else>
             <div class="text-center text-gray-400 dark:text-gray-600">
@@ -160,13 +157,13 @@
           </template>
         </div>
       </div>
-            </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, h, computed, markRaw, defineComponent, nextTick } from 'vue'
-import LogicFlow from '@logicflow/core'
+import { ref, onMounted, onUnmounted, h, computed, markRaw, defineComponent, nextTick, createApp } from 'vue'
+import LogicFlow, { RectNode, RectNodeModel } from '@logicflow/core'
 import { DndPanel, MiniMap, Control, SelectionSelect } from '@logicflow/extension'
 import '@logicflow/core/dist/style/index.css'
 import '@logicflow/extension/lib/style/index.css'
@@ -220,7 +217,7 @@ const getNodeConfigComponent = computed(() => {
     browser: BrowserConfig,
     click: ClickConfig,
     input: InputConfig,
-    condition: ConditionConfig,
+    switch: ConditionConfig,
     loop: LoopConfig,
     extract: ExtractConfig,
     keyboard: KeyboardConfig,
@@ -233,76 +230,69 @@ const getNodeConfigComponent = computed(() => {
   return component ? markRaw(component) as NodeConfigComponent : null
 })
 
-// 创建节点渲染组件
-const createNodeComponent = (node: NodeConfig) => {
-  return defineComponent({
-    name: `${node.type}-node`,
-    render() {
-      const Icon = ElementPlusIconsVue[node.icon]
-      if (!Icon) {
-        console.warn(`图标 ${node.icon} 未找到`)
-        return h('div', { class: 'custom-node' }, [
-          h('span', { class: 'ml-2' }, node.name)
-        ])
-      }
-
-      return h('div', { class: 'custom-node' }, [
-        h('div', { class: 'el-icon' }, [h(Icon)]),
-        h('span', { class: 'ml-2' }, node.name)
-      ])
-    }
-  })
-}
-
 // 注册自定义节点
 const registerNodes = () => {
   if (!lf.value) return
 
-  // 注册基础节点
-  basicNodes.forEach(node => {
+  const registerNodeConfig = (node: NodeConfig) => {
     try {
-      lf.value?.register({
-        type: node.type,
-        view: createNodeComponent(node),
-        model: {
-          initNodeData(data: any) {
-            return {
-              ...data,
-              properties: {
-                name: node.name,
-                ...data.properties
-              }
-            }
+      class CustomNodeModel extends RectNodeModel {
+        constructor(data: any) {
+          super(data)
+          this.width = 150
+          this.height = 40
+        }
+
+        getNodeStyle() {
+          return {
+            fill: '#fff',
+            stroke: '#dcdfe6',
+            strokeWidth: 1,
+            radius: 4,
+            outlineColor: '#409EFF'
           }
         }
+
+        getTextStyle() {
+          return {
+            fontSize: 14,
+            color: '#606266'
+          }
+        }
+      }
+
+      class CustomNode extends RectNode {
+        getShape() {
+          const { model } = this.props
+          const { x, y, width, height } = model
+          const style = model.getNodeStyle()
+          return h('rect', {
+            ...style,
+            x: x - width / 2,
+            y: y - height / 2,
+            width,
+            height,
+            rx: style.radius,
+            ry: style.radius
+          })
+        }
+      }
+
+      lf.value?.register({
+        type: node.type,
+        view: CustomNode,
+        model: CustomNodeModel
       })
     } catch (error) {
       console.error(`注册节点 ${node.type} 失败:`, error)
     }
-  })
+  }
+
+  // 注册基础节点
+  basicNodes.forEach(registerNodeConfig)
 
   // 注册控制节点
-  controlNodes.forEach(node => {
-    try {
-      lf.value?.register({
-        type: node.type,
-        view: createNodeComponent(node),
-        model: {
-          initNodeData(data: any) {
-            return {
-              ...data,
-              properties: {
-                name: node.name,
-                ...data.properties
-              }
-            }
-          }
-        }
-      })
-    } catch (error) {
-      console.error(`注册节点 ${node.type} 失败:`, error)
-    }
-  })
+  controlNodes.forEach(registerNodeConfig)
 }
 
 // 初始化 LogicFlow
@@ -327,6 +317,7 @@ const initLogicFlow = async () => {
   })
 
   lf.value = logicFlow as unknown as LogicFlowApi
+  // lf.value = logicFlow 
 
   // 注册节点
   registerNodes()
@@ -429,12 +420,13 @@ onUnmounted(() => {
     lf.value.off('blank:click')
     lf.value.off('history:change')
     // 销毁实例
-    lf.value.dispose()
+    // lf.value.destroy()
+    console.log(lf.value, '销毁实例')
   }
 })
 </script>
 
-<style lang="postcss">
+<style lang="postcss" scoped>
 .designer-container {
   @apply h-full flex flex-col;
 }
@@ -462,4 +454,4 @@ onUnmounted(() => {
 :deep(.el-collapse-item__content) {
   @apply p-0 border-0;
 }
-</style> 
+</style>

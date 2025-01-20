@@ -8,6 +8,10 @@ module.exports = {
   theme: {
     extend: {},
   },
+  // 禁用预检样式，避免覆盖 Element Plus 的基础样式
+  corePlugins: {
+    preflight: false,
+  },
   plugins: [],
 }
 
