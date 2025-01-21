@@ -10,6 +10,7 @@ export interface NodeConfig {
 export interface NodeProperties {
   name?: string
   description?: string
+  parentId?: string
   actionType?: string
   url?: string
   wait?: number

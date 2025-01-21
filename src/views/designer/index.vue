@@ -169,6 +169,8 @@ import '@logicflow/core/dist/style/index.css'
 import '@logicflow/extension/lib/style/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import type { Component } from 'vue'
+import { FlowExecutor } from '@/utils/flow-executor'
+import { ElMessage } from 'element-plus'
 
 // 导入节点配置组件
 import BrowserConfig from '@/components/node-configs/BrowserConfig.vue'
@@ -194,6 +196,9 @@ const canRedo = ref(false)
 const flowContainer = ref<HTMLElement | null>(null)
 const minimapContainer = ref<HTMLElement | null>(null)
 const lf = ref<LogicFlowApi | null>(null)
+
+// 流程执行器实例
+const flowExecutor = new FlowExecutor()
 
 const basicNodes: NodeConfig[] = [
   { type: 'browser', name: '浏览器', icon: 'Monitor' },
@@ -396,15 +401,19 @@ const handleSave = () => {
 }
 
 // 运行流程
-const handleRun = () => {
+const handleRun = async () => {
   if (!lf.value) return
-  const data = lf.value.getGraphData()
-  console.log('运行流程:', data)
+  try {
+    const data = lf.value.getGraphData()
+    await flowExecutor.start(data.nodes)
+  } catch (error) {
+    ElMessage.error(`运行出错: ${error.message}`)
+  }
 }
 
 // 停止流程
-const handleStop = () => {
-  console.log('停止流程')
+const handleStop = async () => {
+  await flowExecutor.stop()
 }
 
 // 生命周期钩子
