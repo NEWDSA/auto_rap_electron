@@ -27,8 +27,8 @@
     "sqlite3": "5.1.0",
     "vue": "3.4.0",
     "vue-router": "4.2.0",
-    "@logicflow/core": "^1.2.22",
-    "@logicflow/extension": "^1.2.22"
+    "@logicflow/core": "^1.2.23",
+    "@logicflow/extension": "^1.2.23"
   },
   "devDependencies": {
     "@playwright/test": "1.41.0",

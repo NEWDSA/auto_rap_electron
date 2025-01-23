@@ -163,8 +163,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, h, computed, markRaw, nextTick } from 'vue'
-import LogicFlow from '@logicflow/core'
-import { RectNode, RectNodeModel } from '@logicflow/core'
+import LogicFlow, { 
+  BaseNodeModel,
+  RectNode,
+  RectNodeModel,
+  CircleNode,
+  CircleNodeModel
+} from '@logicflow/core'
 import { DndPanel, MiniMap, Control, SelectionSelect } from '@logicflow/extension'
 import '@logicflow/core/dist/style/index.css'
 import '@logicflow/extension/lib/style/index.css'
@@ -257,94 +262,99 @@ const registerEvents = () => {
   })
 }
 
-// 自定义节点基类
+// 自定义普通节点
 class CustomNodeModel extends RectNodeModel {
-  initNodeData(data: BaseNodeData) {
+  initNodeData(data: any) {
     super.initNodeData(data);
-    const { properties } = data;
-    
-    // 设置基础样式
     this.width = 100;
     this.height = 50;
     this.radius = 5;
-    this.fill = '#fff';
-    this.stroke = '#dcdfe6';
-    this.strokeWidth = 1;
-    
-    // 设置文本
-    if (properties?.name) {
-      this.text = {
-        value: properties.name,
-        x: 0,
-        y: 0,
-        draggable: false,
-        editable: false
-      };
-    }
+    this.text = {
+      value: data.properties?.name || '',
+      x: 0,
+      y: 0,
+      draggable: false,
+      editable: false
+    };
   }
 
   getNodeStyle() {
     const style = super.getNodeStyle();
     return {
       ...style,
-      fill: this.fill,
-      stroke: this.stroke,
-      strokeWidth: this.strokeWidth
+      fill: '#fff',
+      stroke: '#dcdfe6',
+      strokeWidth: 1
     };
   }
 }
 
-// 自定义节点视图基类
 class CustomNode extends RectNode {
   getShape() {
     const { model } = this.props;
-    const { width, height, radius, fill, stroke, strokeWidth } = model;
+    const { width, height, radius } = model;
+    const style = model.getNodeStyle();
     
     return h('rect', {
+      ...style,
       x: -width / 2,
       y: -height / 2,
       width,
       height,
       rx: radius,
-      ry: radius,
-      fill,
-      stroke,
-      strokeWidth
+      ry: radius
     });
   }
 }
 
-// 开始节点模型
-class StartNodeModel extends CustomNodeModel {
-  initNodeData(data: BaseNodeData) {
-    super.initNodeData(data);
-    
-    // 设置开始节点特有样式
-    this.width = 80;
-    this.height = 40;
-    this.radius = 20;
-    this.fill = '#e1f3d8';
-    this.stroke = '#67c23a';
-    this.strokeWidth = 2;
-  }
-}
+// 初始化流程
+const initializeFlow = () => {
+  if (!lf.value) return;
 
-// 结束节点模型
-class EndNodeModel extends CustomNodeModel {
-  initNodeData(data: BaseNodeData) {
-    super.initNodeData(data);
+  try {
+    console.log('开始初始化流程...');
     
-    // 设置结束节点特有样式
-    this.width = 80;
-    this.height = 40;
-    this.radius = 20;
-    this.fill = '#fde2e2';
-    this.stroke = '#f56c6c';
-    this.strokeWidth = 2;
-  }
-}
+    // 创建开始节点
+    const startNode = lf.value.addNode({
+      type: 'start',
+      x: 200,
+      y: 200,
+      text: '开始流程',
+      properties: {
+        nodeType: 'start'
+      }
+    });
+    console.log('创建开始节点:', startNode);
 
-// 修改节点注册方法
+    // 创建结束节点
+    const endNode = lf.value.addNode({
+      type: 'end',
+      x: 600,
+      y: 200,
+      text: '结束流程',
+      properties: {
+        nodeType: 'end'
+      }
+    });
+    console.log('创建结束节点:', endNode);
+
+    // 连接开始和结束节点
+    if (startNode && endNode) {
+      const edge = lf.value.addEdge({
+        type: 'line',
+        sourceNodeId: startNode.id,
+        targetNodeId: endNode.id,
+        text: '默认连接',
+        properties: {}
+      });
+      console.log('创建连接:', edge);
+    }
+  } catch (error) {
+    console.error('初始化流程失败:', error);
+  }
+};
+
+// 注册节点
 const registerNodes = () => {
   if (!lf.value) return;
 
@@ -354,16 +364,16 @@ const registerNodes = () => {
     // 注册开始节点
     lf.value.register({
       type: 'start',
-      view: CustomNode,
-      model: StartNodeModel
+      view: CircleNode,
+      model: CircleNodeModel
     });
     console.log('注册开始节点完成');
 
     // 注册结束节点
     lf.value.register({
       type: 'end',
-      view: CustomNode,
-      model: EndNodeModel
+      view: CircleNode,
+      model: CircleNodeModel
     });
     console.log('注册结束节点完成');
 
@@ -393,53 +403,6 @@ const registerNodes = () => {
   }
 };
 
-// 修改初始化流程方法
-const initializeFlow = () => {
-  if (!lf.value) return;
-
-  try {
-    console.log('开始初始化流程...');
-    
-    // 创建开始节点
-    const startNode = lf.value.addNode({
-      type: 'start',
-      x: 200,
-      y: 200,
-      properties: {
-        name: '开始流程',
-        nodeType: 'start'
-      }
-    });
-    console.log('创建开始节点:', startNode);
-
-    // 创建结束节点
-    const endNode = lf.value.addNode({
-      type: 'end',
-      x: 600,
-      y: 200,
-      properties: {
-        name: '结束流程',
-        nodeType: 'end'
-      }
-    });
-    console.log('创建结束节点:', endNode);
-
-    // 连接开始和结束节点
-    if (startNode && endNode) {
-      const edge = lf.value.addEdge({
-        type: 'line',
-        sourceNodeId: startNode.id,
-        targetNodeId: endNode.id,
-        text: '默认连接',
-        properties: {}
-      });
-      console.log('创建连接:', edge);
-    }
-  } catch (error) {
-    console.error('初始化流程失败:', error);
-  }
-};
-
 // 初始化 LogicFlow
 const initLogicFlow = async () => {
   if (!flowContainer.value) return;
@@ -457,18 +420,17 @@ const initLogicFlow = async () => {
       snapline: true,
       style: {
         rect: {
-          width: 100,
-          height: 50,
           radius: 5,
-          fill: '#fff',
-          stroke: '#dcdfe6',
-          strokeWidth: 1
+        },
+        circle: {
+          r: 25,
+          fill: '#f5f5f5',
+          stroke: '#666'
         },
         nodeText: {
           fontSize: 14,
           color: '#333',
-          textAlign: 'center',
-          textBaseline: 'middle'
+          overflowMode: 'autoWrap',
         },
         edgeText: {
           fontSize: 12,
