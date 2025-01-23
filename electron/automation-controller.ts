@@ -69,7 +69,7 @@ export class AutomationController {
         await this.executeScreenshotNode(properties)
         break
       case 'switch':
-        await this.executeSwitchNode(properties)
+        await this.executeSwitchNode(properties, node, nodes)
         break
       case 'loop':
         await this.executeLoopNode(properties, node, nodes)
@@ -232,7 +232,7 @@ export class AutomationController {
     }
   }
 
-  private async executeSwitchNode(properties: NodeProperties) {
+  private async executeSwitchNode(properties: NodeProperties, node: FlowNode, nodes: FlowNode[]) {
     if (!this.page) return
 
     const { condition, selector, value } = properties
@@ -243,8 +243,22 @@ export class AutomationController {
       case 'exists':
         result = await this.page.$(selector) !== null
         break
+      case 'notExists':
+        result = await this.page.$(selector) === null
+        break
       case 'visible':
         result = await this.page.isVisible(selector)
+        break
+      case 'notVisible':
+        result = !await this.page.isVisible(selector)
+        break
+      case 'clickable':
+        const element = await this.page.$(selector)
+        result = element ? await element.isEnabled() : false
+        break
+      case 'notClickable':
+        const el = await this.page.$(selector)
+        result = el ? !await el.isEnabled() : true
         break
       case 'textContains':
         if (value) {
@@ -252,6 +266,39 @@ export class AutomationController {
           result = text?.includes(value) || false
         }
         break
+      case 'textNotContains':
+        if (value) {
+          const text = await this.page.textContent(selector)
+          result = !text?.includes(value)
+        }
+        break
+      case 'textEquals':
+        if (value) {
+          const text = await this.page.textContent(selector)
+          result = text === value
+        }
+        break
+      case 'textNotEquals':
+        if (value) {
+          const text = await this.page.textContent(selector)
+          result = text !== value
+        }
+        break
+    }
+
+    // 获取子节点
+    const childNodes = nodes.filter(n => n.properties.parentId === node.id)
+    
+    // 根据条件结果执行相应分支
+    for (const childNode of childNodes) {
+      // 检查节点是否为条件分支
+      const isTrueBranch = childNode.properties.branchType === 'true'
+      const isFalseBranch = childNode.properties.branchType === 'false'
+
+      // 根据条件结果选择执行分支
+      if ((result && isTrueBranch) || (!result && isFalseBranch)) {
+        await this.executeNode(childNode, nodes)
+      }
     }
 
     return result

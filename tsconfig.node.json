@@ -7,5 +7,8 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["vite.config.ts", "electron"]
+  "include": [
+    "electron/**/*",
+    "src/types/**/*"
+  ]
 } 

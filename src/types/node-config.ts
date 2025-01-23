@@ -1,5 +1,50 @@
 import type { Component, DefineComponent } from 'vue'
 import type * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import { RectNodeModel } from '@logicflow/core'
+import type { LogicFlow } from '@logicflow/core'
+import type { RectNode } from '@logicflow/core'
+
+// 扩展 RectNodeModel 的类型定义
+declare module '@logicflow/core' {
+  interface RectNodeModel {
+    width: number;
+    height: number;
+    radius: number;
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    getAttributes(): {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      radius: number;
+      fill: string;
+      stroke: string;
+      strokeWidth: number;
+      [key: string]: any;
+    };
+  }
+}
+
+// 扩展 RectNodeModel 的属性
+export interface CustomNodeModelProperties extends RectNodeModel {
+  width: number
+  height: number
+  radius: number
+  fill: string
+  stroke: string
+  strokeWidth: number
+  text: {
+    value: string
+    x: number
+    y: number
+    fontSize: number
+    color: string
+    textAlign: string
+    textBaseline: string
+  }
+}
 
 export interface NodeConfig {
   type: string
@@ -8,38 +53,13 @@ export interface NodeConfig {
 }
 
 export interface NodeProperties {
-  name?: string
+  name: string
   description?: string
-  parentId?: string
-  actionType?: string
-  url?: string
-  wait?: number
-  selector?: string
-  value?: string
-  condition?: string
-  loopType?: string
-  count?: number
-  extractType?: string
-  attributeName?: string
-  variableName?: string
-  key?: string
-  modifiers?: string[]
-  text?: string
-  x?: number
-  y?: number
-  smooth?: boolean
-  waitType?: string
-  timeout?: number
-  reverse?: boolean
-  screenshotType?: string
-  path?: string
-  omitBackground?: boolean
-  quality?: number
+  nodeType?: string
+  [key: string]: any
 }
 
-export interface FlowNode {
-  id: string
-  type: string
+export interface FlowNode extends BaseNodeData {
   properties: NodeProperties
 }
 
@@ -51,24 +71,58 @@ export interface NodeConfigProps {
 export type NodeConfigComponent = DefineComponent<NodeConfigProps>
 
 export interface LogicFlowEvents {
-  'element:click': { data: FlowNode }
-  'blank:click': void
-  'history:change': { undoAble: boolean, redoAble: boolean }
+  'element:click': (data: { data: FlowNode }) => void
+  'blank:click': () => void
+  'history:change': (data: { undoAble: boolean; redoAble: boolean }) => void
 }
 
 export interface LogicFlowApi {
   render: () => void
   destroy: () => void
-  on: <K extends keyof LogicFlowEvents>(event: K, callback: (data: LogicFlowEvents[K]) => void) => void
-  off: <K extends keyof LogicFlowEvents>(event: K) => void
+  dispose: () => void
+  on: (event: string, callback: Function) => void
+  off: (event: string) => void
   register: (config: any) => void
-  setProperties: (id: string, properties: NodeProperties) => void
-  undo: () => void
-  redo: () => void
+  setProperties: (id: string, properties: any) => void
+  addNode: (config: any) => any
+  addEdge: (config: any) => any
   getGraphData: () => any
   extension: {
     miniMap: {
-      init: (config: { container: HTMLElement, width: number, height: number }) => void
+      init: (config: any) => void
+    }
+  }
+}
+
+export interface BaseNodeData {
+  id: string
+  type: string
+  x: number
+  y: number
+  properties: NodeProperties
+}
+
+export interface BaseEdgeData {
+  id: string
+  type: string
+  sourceNodeId: string
+  targetNodeId: string
+  text?: string
+  properties: Record<string, any>
+}
+
+export interface EdgeProperties {
+  name?: string
+  description?: string
+  text?: string
+}
+
+class CustomNodeModel extends RectNodeModel {
+  getNodeStyle() {
+    const style = super.getNodeStyle()
+    return {
+      ...style,
+      strokeWidth: 1
     }
   }
 } 

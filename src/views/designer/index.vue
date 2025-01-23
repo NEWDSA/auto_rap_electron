@@ -162,13 +162,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, h, computed, markRaw, defineComponent, nextTick, createApp } from 'vue'
-import LogicFlow, { RectNode, RectNodeModel } from '@logicflow/core'
+import { ref, onMounted, onUnmounted, h, computed, markRaw, nextTick } from 'vue'
+import LogicFlow from '@logicflow/core'
+import { RectNode, RectNodeModel } from '@logicflow/core'
 import { DndPanel, MiniMap, Control, SelectionSelect } from '@logicflow/extension'
 import '@logicflow/core/dist/style/index.css'
 import '@logicflow/extension/lib/style/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-import type { Component } from 'vue'
+import { Document, ArrowLeft, ArrowRight, VideoPlay, VideoPause, Box, Tools } from '@element-plus/icons-vue'
+import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
+import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
 import { FlowExecutor } from '@/utils/flow-executor'
 import { ElMessage } from 'element-plus'
 
@@ -185,7 +187,7 @@ import WaitConfig from '@/components/node-configs/WaitConfig.vue'
 import ScreenshotConfig from '@/components/node-configs/ScreenshotConfig.vue'
 
 // 类型定义
-import type { NodeConfigComponent, FlowNode, LogicFlowApi, LogicFlowEvents, NodeConfig } from '@/types/node-config'
+import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
 
 // 响应式状态
 const flowName = ref('')
@@ -195,18 +197,20 @@ const canUndo = ref(false)
 const canRedo = ref(false)
 const flowContainer = ref<HTMLElement | null>(null)
 const minimapContainer = ref<HTMLElement | null>(null)
-const lf = ref<LogicFlowApi | null>(null)
+const lf = ref<InstanceType<typeof LogicFlow> | null>(null)
 
 // 流程执行器实例
 const flowExecutor = new FlowExecutor()
 
 const basicNodes: NodeConfig[] = [
+  { type: 'start', name: '开始', icon: 'VideoPlay' },
   { type: 'browser', name: '浏览器', icon: 'Monitor' },
   { type: 'extract', name: '提取', icon: 'Search' },
   { type: 'keyboard', name: '键盘', icon: 'EditPen' },
   { type: 'mouse', name: '鼠标', icon: 'Position' },
   { type: 'wait', name: '等待', icon: 'Timer' },
-  { type: 'screenshot', name: '截图', icon: 'PictureRounded' }
+  { type: 'screenshot', name: '截图', icon: 'PictureRounded' },
+  { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
 
 const controlNodes: NodeConfig[] = [
@@ -235,128 +239,277 @@ const getNodeConfigComponent = computed(() => {
   return component ? markRaw(component) as NodeConfigComponent : null
 })
 
-// 注册自定义节点
-const registerNodes = () => {
+// 添加事件注册方法
+const registerEvents = () => {
   if (!lf.value) return
 
-  const registerNodeConfig = (node: NodeConfig) => {
-    try {
-      class CustomNodeModel extends RectNodeModel {
-        constructor(data: any) {
-          super(data)
-          this.width = 150
-          this.height = 40
-        }
-
-        getNodeStyle() {
-          return {
-            fill: '#fff',
-            stroke: '#dcdfe6',
-            strokeWidth: 1,
-            radius: 4,
-            outlineColor: '#409EFF'
-          }
-        }
-
-        getTextStyle() {
-          return {
-            fontSize: 14,
-            color: '#606266'
-          }
-        }
-      }
-
-      class CustomNode extends RectNode {
-        getShape() {
-          const { model } = this.props
-          const { x, y, width, height } = model
-          const style = model.getNodeStyle()
-          return h('rect', {
-            ...style,
-            x: x - width / 2,
-            y: y - height / 2,
-            width,
-            height,
-            rx: style.radius,
-            ry: style.radius
-          })
-        }
-      }
-
-      lf.value?.register({
-        type: node.type,
-        view: CustomNode,
-        model: CustomNodeModel
-      })
-    } catch (error) {
-      console.error(`注册节点 ${node.type} 失败:`, error)
-    }
-  }
-
-  // 注册基础节点
-  basicNodes.forEach(registerNodeConfig)
-
-  // 注册控制节点
-  controlNodes.forEach(registerNodeConfig)
-}
-
-// 初始化 LogicFlow
-const initLogicFlow = async () => {
-  if (!flowContainer.value) return
-
-  const logicFlow = new LogicFlow({
-    container: flowContainer.value,
-    grid: true,
-    plugins: [DndPanel, MiniMap, Control, SelectionSelect],
-    nodeTextEdit: false,
-    edgeTextEdit: false,
-    nodeTextDraggable: false,
-    edgeTextDraggable: false,
-    adjustNodePosition: true,
-    snapline: true,
-    style: {
-      rect: {
-        radius: 5,
-      },
-    },
-  })
-
-  lf.value = logicFlow as unknown as LogicFlowApi
-  // lf.value = logicFlow 
-
-  // 注册节点
-  registerNodes()
-
-  // 事件监听
-  lf.value.on('element:click', ({ data }) => {
-    selectedNode.value = data
+  lf.value.on('element:click', (data: { data: FlowNode }) => {
+    selectedNode.value = data.data
   })
 
   lf.value.on('blank:click', () => {
     selectedNode.value = null
   })
 
-  lf.value.on('history:change', ({ undoAble, redoAble }) => {
-    canUndo.value = undoAble
-    canRedo.value = redoAble
+  lf.value.on('history:change', (data: { undoAble: boolean, redoAble: boolean }) => {
+    canUndo.value = data.undoAble
+    canRedo.value = data.redoAble
   })
-
-  // 初始化小地图
-  if (minimapContainer.value) {
-    lf.value.extension.miniMap.init({
-      container: minimapContainer.value,
-      width: 192,
-      height: 128,
-    })
-  }
-
-  // 渲染
-  await nextTick()
-  lf.value.render()
 }
 
+// 自定义节点基类
+class CustomNodeModel extends RectNodeModel {
+  initNodeData(data: BaseNodeData) {
+    super.initNodeData(data);
+    const { properties } = data;
+    
+    // 设置基础样式
+    this.width = 100;
+    this.height = 50;
+    this.radius = 5;
+    this.fill = '#fff';
+    this.stroke = '#dcdfe6';
+    this.strokeWidth = 1;
+    
+    // 设置文本
+    if (properties?.name) {
+      this.text = {
+        value: properties.name,
+        x: 0,
+        y: 0,
+        draggable: false,
+        editable: false
+      };
+    }
+  }
+
+  getNodeStyle() {
+    const style = super.getNodeStyle();
+    return {
+      ...style,
+      fill: this.fill,
+      stroke: this.stroke,
+      strokeWidth: this.strokeWidth
+    };
+  }
+}
+
+// 自定义节点视图基类
+class CustomNode extends RectNode {
+  getShape() {
+    const { model } = this.props;
+    const { width, height, radius, fill, stroke, strokeWidth } = model;
+    
+    return h('rect', {
+      x: -width / 2,
+      y: -height / 2,
+      width,
+      height,
+      rx: radius,
+      ry: radius,
+      fill,
+      stroke,
+      strokeWidth
+    });
+  }
+}
+
+// 开始节点模型
+class StartNodeModel extends CustomNodeModel {
+  initNodeData(data: BaseNodeData) {
+    super.initNodeData(data);
+    
+    // 设置开始节点特有样式
+    this.width = 80;
+    this.height = 40;
+    this.radius = 20;
+    this.fill = '#e1f3d8';
+    this.stroke = '#67c23a';
+    this.strokeWidth = 2;
+  }
+}
+
+// 结束节点模型
+class EndNodeModel extends CustomNodeModel {
+  initNodeData(data: BaseNodeData) {
+    super.initNodeData(data);
+    
+    // 设置结束节点特有样式
+    this.width = 80;
+    this.height = 40;
+    this.radius = 20;
+    this.fill = '#fde2e2';
+    this.stroke = '#f56c6c';
+    this.strokeWidth = 2;
+  }
+}
+
+// 修改节点注册方法
+const registerNodes = () => {
+  if (!lf.value) return;
+
+  try {
+    console.log('开始注册节点...');
+    
+    // 注册开始节点
+    lf.value.register({
+      type: 'start',
+      view: CustomNode,
+      model: StartNodeModel
+    });
+    console.log('注册开始节点完成');
+
+    // 注册结束节点
+    lf.value.register({
+      type: 'end',
+      view: CustomNode,
+      model: EndNodeModel
+    });
+    console.log('注册结束节点完成');
+
+    // 注册其他节点
+    const registerNodeConfig = (node: NodeConfig) => {
+      // 跳过已注册的开始和结束节点
+      if (node.type === 'start' || node.type === 'end') return;
+      
+      try {
+        lf.value?.register({
+          type: node.type,
+          view: CustomNode,
+          model: CustomNodeModel
+        });
+        console.log(`注册节点完成: ${node.type}`);
+      } catch (error) {
+        console.error(`注册节点失败: ${node.type}`, error);
+      }
+    };
+
+    // 注册所有基础节点
+    basicNodes.forEach(registerNodeConfig);
+    // 注册所有控制节点
+    controlNodes.forEach(registerNodeConfig);
+  } catch (error) {
+    console.error('注册节点失败:', error);
+  }
+};
+
+// 修改初始化流程方法
+const initializeFlow = () => {
+  if (!lf.value) return;
+
+  try {
+    console.log('开始初始化流程...');
+    
+    // 创建开始节点
+    const startNode = lf.value.addNode({
+      type: 'start',
+      x: 200,
+      y: 200,
+      properties: {
+        name: '开始流程',
+        nodeType: 'start'
+      }
+    });
+    console.log('创建开始节点:', startNode);
+
+    // 创建结束节点
+    const endNode = lf.value.addNode({
+      type: 'end',
+      x: 600,
+      y: 200,
+      properties: {
+        name: '结束流程',
+        nodeType: 'end'
+      }
+    });
+    console.log('创建结束节点:', endNode);
+
+    // 连接开始和结束节点
+    if (startNode && endNode) {
+      const edge = lf.value.addEdge({
+        type: 'line',
+        sourceNodeId: startNode.id,
+        targetNodeId: endNode.id,
+        text: '默认连接',
+        properties: {}
+      });
+      console.log('创建连接:', edge);
+    }
+  } catch (error) {
+    console.error('初始化流程失败:', error);
+  }
+};
+
+// 初始化 LogicFlow
+const initLogicFlow = async () => {
+  if (!flowContainer.value) return;
+
+  try {
+    const logicFlow = new LogicFlow({
+      container: flowContainer.value,
+      grid: true,
+      plugins: [DndPanel, MiniMap, Control, SelectionSelect],
+      nodeTextEdit: false,
+      edgeTextEdit: false,
+      nodeTextDraggable: false,
+      edgeTextDraggable: false,
+      adjustNodePosition: true,
+      snapline: true,
+      style: {
+        rect: {
+          width: 100,
+          height: 50,
+          radius: 5,
+          fill: '#fff',
+          stroke: '#dcdfe6',
+          strokeWidth: 1
+        },
+        nodeText: {
+          fontSize: 14,
+          color: '#333',
+          textAlign: 'center',
+          textBaseline: 'middle'
+        },
+        edgeText: {
+          fontSize: 12,
+          color: '#666',
+          background: {
+            fill: '#fff'
+          }
+        }
+      }
+    });
+
+    lf.value = logicFlow;
+
+    // 注册节点
+    registerNodes();
+
+    // 事件监听
+    registerEvents();
+
+    // 初始化小地图
+    if (minimapContainer.value) {
+      lf.value.extension.miniMap.init({
+        container: minimapContainer.value,
+        width: 192,
+        height: 128
+      });
+    }
+
+    // 渲染
+    await nextTick();
+    lf.value.render();
+
+    // 初始化开始和结束节点
+    initializeFlow();
+  } catch (error) {
+    console.error('初始化 LogicFlow 失败:', error);
+  }
+};
+
 // 拖拽开始
-const handleDragStart = (event: DragEvent, node: any) => {
+const handleDragStart = (event: DragEvent, node: NodeConfig) => {
   if (!event.dataTransfer) return
   event.dataTransfer.setData('nodeType', node.type)
   event.dataTransfer.effectAllowed = 'move'
@@ -406,7 +559,7 @@ const handleRun = async () => {
   try {
     const data = lf.value.getGraphData()
     await flowExecutor.start(data.nodes)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(`运行出错: ${error.message}`)
   }
 }
@@ -418,21 +571,15 @@ const handleStop = async () => {
 
 // 生命周期钩子
 onMounted(async () => {
-  await nextTick()
-  await initLogicFlow()
-})
+  await nextTick();
+  await initLogicFlow();
+});
 
 onUnmounted(() => {
   if (lf.value) {
-    // 移除事件监听器
-    lf.value.off('element:click')
-    lf.value.off('blank:click')
-    lf.value.off('history:change')
-    // 销毁实例
-    // lf.value.destroy()
-    console.log(lf.value, '销毁实例')
+    // lf.value.destroy();
   }
-})
+});
 </script>
 
 <style lang="postcss" scoped>
