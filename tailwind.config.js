@@ -12,6 +12,8 @@ module.exports = {
   corePlugins: {
     preflight: false,
   },
-  plugins: [],
+  plugins: [
+    require('postcss-nesting')
+  ],
 }
 

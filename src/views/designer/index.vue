@@ -1,162 +1,165 @@
 <template>
-  <div class="designer-container">
-    <!-- 工具栏 -->
-    <div class="toolbar bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4">
-      <div class="flex justify-between items-center">
-        <div class="flex items-center space-x-4">
-          <!-- 流程名称 -->
-          <div class="flex items-center space-x-2">
-            <el-icon>
-              <Document />
-            </el-icon>
-            <span class="text-gray-600">流程名称</span>
-          </div>
-          <el-input v-model="flowName" placeholder="请输入流程名称" class="!w-64" />
-        </div>
+  <div class="h-full flex flex-col">
+    <!-- 顶部工具栏 -->
+    <div class="p-2 flex items-center space-x-2 bg-[#fafafa] bg-opacity-80 backdrop-blur-sm border-b relative z-10">
+      <div class="absolute inset-0 bg-grid opacity-10"></div>
+      <div class="flex items-center space-x-4 relative">
+        <el-button-group>
+          <el-button type="primary" @click="handleSave">
+            <el-icon><Document /></el-icon>
+            保存
+          </el-button>
+          <el-button 
+            type="success" 
+            :loading="isRunning" 
+            @click="handleRun"
+            v-if="!isRunning"
+          >
+            <el-icon><VideoPlay /></el-icon>
+            运行
+          </el-button>
+          <el-button 
+            type="danger" 
+            @click="handleStop"
+            v-else
+          >
+            <el-icon><VideoPause /></el-icon>
+            停止
+          </el-button>
+        </el-button-group>
 
-        <!-- 操作按钮 -->
-        <div class="flex items-center space-x-4">
-          <el-button-group>
-            <el-tooltip content="撤销" placement="bottom">
-              <el-button type="primary" plain @click="handleUndo" :disabled="!canUndo">
-                <el-icon>
-                  <ArrowLeft />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="重做" placement="bottom">
-              <el-button type="primary" plain @click="handleRedo" :disabled="!canRedo">
-                <el-icon>
-                  <ArrowRight />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-          <el-button-group>
-            <el-tooltip content="保存流程" placement="bottom">
-              <el-button type="primary" @click="handleSave">
-                <el-icon>
-                  <Document />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="运行" placement="bottom">
-              <el-button type="success" @click="handleRun">
-                <el-icon>
-                  <VideoPlay />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="停止" placement="bottom">
-              <el-button type="warning" @click="handleStop">
-                <el-icon>
-                  <VideoPause />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-        </div>
+        <el-divider direction="vertical" />
+
+        <!-- 视图控制按钮组 -->
+        <!-- <el-button-group>
+          <el-button @click="handleZoomOut">
+            <el-icon><Remove /></el-icon>
+            缩小
+          </el-button>
+          <el-button @click="handleZoomIn">
+            <el-icon><CirclePlus /></el-icon>
+            放大
+          </el-button>
+          <el-button @click="handleFitView">
+            <el-icon><FullScreen /></el-icon>
+            适应
+          </el-button>
+          <el-button @click="handleUndo">
+            <el-icon><Refresh class="transform rotate-180" /></el-icon>
+            上一步
+          </el-button>
+          <el-button @click="handleRedo">
+            <el-icon><Refresh /></el-icon>
+            下一步
+          </el-button>
+        </el-button-group> -->
       </div>
     </div>
 
-    <!-- 主设计区域 -->
-    <div class="flex-1 flex">
-      <!-- 左侧组件面板 -->
-      <div class="w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 overflow-hidden">
-        <div class="p-4 border-b dark:border-gray-700">
-          <h3 class="text-lg font-medium">组件列表</h3>
+    <!-- 主要内容区域 -->
+    <div class="flex-1 flex relative">
+      <!-- 左侧工具箱 -->
+      <div 
+        class="border-r bg-white flex flex-col transition-all duration-300"
+        :class="{ 'w-48': !toolsPanelCollapsed, 'w-12': toolsPanelCollapsed }"
+      >
+        <div class="p-2 border-b flex items-center justify-between">
+          <span v-show="!toolsPanelCollapsed" class="text-sm">组件面板</span>
+          <el-button type="text" @click="toolsPanelCollapsed = !toolsPanelCollapsed">
+            <el-icon>
+              <component :is="toolsPanelCollapsed ? 'ArrowRight' : 'ArrowLeft'" />
+            </el-icon>
+          </el-button>
         </div>
-
-        <div class="p-2 space-y-2">
-          <!-- 基础组件 -->
-          <el-collapse v-model="activeCollapse" class="border-0">
-            <el-collapse-item name="basic">
-              <template #title>
-                <div class="flex items-center">
-                  <el-icon class="mr-2">
-                    <Box />
-                  </el-icon>
-                  基础组件
+        
+        <div class="flex-1 overflow-y-auto" v-show="!toolsPanelCollapsed">
+          <div class="p-2">
+            <el-collapse v-model="activeCategories">
+              <el-collapse-item title="基础组件" name="basic">
+                <template #title>
+                  <el-icon><Tools /></el-icon>
+                  <span>基础组件</span>
+                </template>
+                <div class="space-y-1">
+                  <div
+                    v-for="node in basicNodes"
+                    :key="node.type"
+                    class="component-item p-2 rounded cursor-move hover:bg-gray-100"
+                    draggable="true"
+                    @dragstart="handleDragStart($event, node)"
+                  >
+                    <el-icon><component :is="node.icon" /></el-icon>
+                    <span class="ml-2">{{ node.name }}</span>
+                  </div>
                 </div>
-              </template>
-              <div class="space-y-2 p-2">
-                <div v-for="node in basicNodes" :key="node.type" class="component-item" draggable="true"
-                  @dragstart="handleDragStart($event, node)">
-                  <el-icon>
-                    <component :is="node.icon" />
-                  </el-icon>
-                  <span class="ml-2">{{ node.name }}</span>
+              </el-collapse-item>
+              
+              <el-collapse-item title="控制组件" name="control">
+                <template #title>
+                  <el-icon><Operation /></el-icon>
+                  <span>控制组件</span>
+                </template>
+                <div class="space-y-1">
+                  <div
+                    v-for="node in controlNodes"
+                    :key="node.type"
+                    class="component-item p-2 rounded cursor-move hover:bg-gray-100"
+                    draggable="true"
+                    @dragstart="handleDragStart($event, node)"
+                  >
+                    <el-icon><component :is="node.icon" /></el-icon>
+                    <span class="ml-2">{{ node.name }}</span>
+                  </div>
                 </div>
-              </div>
-            </el-collapse-item>
-
-            <el-collapse-item name="control">
-              <template #title>
-                <div class="flex items-center">
-                  <el-icon class="mr-2">
-                    <Tools />
-                  </el-icon>
-                  流程控制
-                </div>
-              </template>
-              <div class="space-y-2 p-2">
-                <div v-for="node in controlNodes" :key="node.type" class="component-item" draggable="true"
-                  @dragstart="handleDragStart($event, node)">
-                  <el-icon>
-                    <component :is="node.icon" />
-                  </el-icon>
-                  <span class="ml-2">{{ node.name }}</span>
-                </div>
-              </div>
-            </el-collapse-item>
-          </el-collapse>
+              </el-collapse-item>
+            </el-collapse>
+          </div>
         </div>
       </div>
 
       <!-- 中间画布区域 -->
-      <div class="flex-1 bg-gray-50 dark:bg-gray-900 relative">
-        <!-- 流程图容器 -->
-        <div ref="flowContainer" class="w-full h-full" />
-
-        <!-- 小地图 -->
-        <div class="absolute bottom-4 right-4 bg-white dark:bg-gray-800 rounded shadow-lg">
-          <div ref="minimapContainer" class="w-48 h-32" />
+      <div class="flex-1 flex flex-col">
+        <div class="flex-1 relative" ref="container">
+          <div ref="flowContainer" class="w-full h-full"></div>
         </div>
       </div>
 
       <!-- 右侧属性面板 -->
-      <div class="w-80 bg-white dark:bg-gray-800 border-l dark:border-gray-700 overflow-hidden">
-        <div class="p-4 border-b dark:border-gray-700">
-          <h3 class="text-lg font-medium">属性设置</h3>
+      <div 
+        v-if="selectedNode"
+        class="border-l bg-white flex flex-col transition-all duration-300"
+        :class="{ 'w-64': !propertiesPanelCollapsed, 'w-0': propertiesPanelCollapsed }"
+      >
+        <div class="p-2 border-b flex items-center justify-between">
+          <span class="text-sm">属性设置</span>
+          <el-button type="text" @click="selectedNode = null">
+            <el-icon><Close /></el-icon>
+          </el-button>
         </div>
+        
+        <div class="flex-1 overflow-y-auto p-4">
+          <el-form label-position="top">
+            <el-form-item label="节点名称">
+              <el-input 
+                v-model="selectedNode.properties.name"
+                @change="handleNodePropertyChange('name')"
+              />
+            </el-form-item>
 
-        <div class="p-4 overflow-y-auto" style="height: calc(100% - 57px);">
-          <template v-if="selectedNode">
-            <el-form label-position="top">
-              <!-- 基础属性 -->
-              <el-form-item label="节点名称">
-                <el-input v-model="selectedNode.properties.name" @change="updateNodeName" />
-              </el-form-item>
-
-              <!-- 节点描述 -->
-              <el-form-item label="节点描述">
-                <el-input v-model="selectedNode.properties.description" type="textarea" rows="2"
-                  @change="updateNodeProperty('description')" />
-              </el-form-item>
-
-              <!-- 动态属性配置 -->
-              <component :is="getNodeConfigComponent" v-if="getNodeConfigComponent" :node="selectedNode"
-                @update="updateNodeProperty" />
-            </el-form>
-          </template>
-          <template v-else>
-            <div class="text-center text-gray-400 dark:text-gray-600">
-              <el-icon class="text-4xl mb-2"><Select /></el-icon>
-              <p>选择节点查看属性</p>
-            </div>
-          </template>
+            <component
+              v-if="nodeConfigComponent"
+              :is="nodeConfigComponent"
+              :node="selectedNode"
+              @update="handleNodePropertyChange"
+            />
+          </el-form>
         </div>
       </div>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <div class="h-8 border-t flex items-center px-4 bg-gray-50">
+      <span class="text-sm text-gray-500">{{ statusText }}</span>
     </div>
   </div>
 </template>
@@ -164,7 +167,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, h, computed, markRaw, nextTick } from 'vue'
 import LogicFlow, { 
-  BaseNodeModel,
+  NodeModel,
   RectNode,
   RectNodeModel,
   CircleNode,
@@ -173,7 +176,22 @@ import LogicFlow, {
 import { DndPanel, MiniMap, Control, SelectionSelect } from '@logicflow/extension'
 import '@logicflow/core/dist/style/index.css'
 import '@logicflow/extension/lib/style/index.css'
-import { Document, ArrowLeft, ArrowRight, VideoPlay, VideoPause, Box, Tools } from '@element-plus/icons-vue'
+import { 
+  Document, 
+  ArrowLeft, 
+  ArrowRight, 
+  VideoPlay, 
+  VideoPause,
+  Remove,
+  CirclePlus,
+  FullScreen,
+  CircleClose,
+  Close,
+  Tools,
+  Operation,
+  RefreshLeft,
+  RefreshRight
+} from '@element-plus/icons-vue'
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
 import { FlowExecutor } from '@/utils/flow-executor'
@@ -196,13 +214,17 @@ import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
 
 // 响应式状态
 const flowName = ref('')
-const activeCollapse = ref(['basic', 'control'])
+const activeCategories = ref(['basic', 'control'])
 const selectedNode = ref<FlowNode | null>(null)
 const canUndo = ref(false)
 const canRedo = ref(false)
 const flowContainer = ref<HTMLElement | null>(null)
 const minimapContainer = ref<HTMLElement | null>(null)
 const lf = ref<InstanceType<typeof LogicFlow> | null>(null)
+const toolsPanelCollapsed = ref(false)
+const propertiesPanelCollapsed = ref(false)
+const isRunning = ref(false)
+const statusText = ref('')
 
 // 流程执行器实例
 const flowExecutor = new FlowExecutor()
@@ -264,6 +286,8 @@ const registerEvents = () => {
 
 // 自定义普通节点
 class CustomNodeModel extends RectNodeModel {
+  text: any;
+  
   initNodeData(data: any) {
     super.initNodeData(data);
     this.width = 100;
@@ -279,7 +303,7 @@ class CustomNodeModel extends RectNodeModel {
   }
 
   getNodeStyle() {
-    const style = super.getNodeStyle();
+    const style = super.getNodeStyle?.() || {};
     return {
       ...style,
       fill: '#fff',
@@ -559,6 +583,25 @@ const handleStop = async () => {
   await flowExecutor.stop()
 }
 
+// 视图控制方法
+const handleZoomIn = () => {
+  if (!lf.value) return
+  const zoomInfo = lf.value.getTransform()
+  lf.value.setTransform({ ...zoomInfo, scale: zoomInfo.scale * 1.1 })
+}
+
+const handleZoomOut = () => {
+  if (!lf.value) return
+  const zoomInfo = lf.value.getTransform()
+  lf.value.setTransform({ ...zoomInfo, scale: zoomInfo.scale * 0.9 })
+}
+
+const handleFitView = () => {
+  if (!lf.value) return
+  lf.value.resetTransform()
+  lf.value.focusOn()
+}
+
 // 生命周期钩子
 onMounted(async () => {
   await nextTick();
@@ -599,5 +642,10 @@ onUnmounted(() => {
 
 :deep(.el-collapse-item__content) {
   @apply p-0 border-0;
+}
+
+.bg-grid {
+  background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 </style>
