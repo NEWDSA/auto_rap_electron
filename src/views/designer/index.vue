@@ -344,7 +344,6 @@ const initializeFlow = () => {
         type: 'line',
         sourceNodeId: startNode.id,
         targetNodeId: endNode.id,
-        text: '默认连接',
         properties: {}
       });
       console.log('创建连接:', edge);
@@ -364,16 +363,50 @@ const registerNodes = () => {
     // 注册开始节点
     lf.value.register({
       type: 'start',
-      view: CircleNode,
-      model: CircleNodeModel
+      view: RectNode,
+      model: class StartNodeModel extends RectNodeModel {
+        initNodeData(data: any) {
+          super.initNodeData(data);
+          this.width = 80;
+          this.height = 40;
+          this.radius = 20;
+        }
+
+        getNodeStyle() {
+          const style = super.getNodeStyle();
+          return {
+            ...style,
+            fill: '#e1f3d8',
+            stroke: '#67c23a',
+            strokeWidth: 2
+          };
+        }
+      }
     });
     console.log('注册开始节点完成');
 
     // 注册结束节点
     lf.value.register({
       type: 'end',
-      view: CircleNode,
-      model: CircleNodeModel
+      view: RectNode,
+      model: class EndNodeModel extends RectNodeModel {
+        initNodeData(data: any) {
+          super.initNodeData(data);
+          this.width = 80;
+          this.height = 40;
+          this.radius = 20;
+        }
+
+        getNodeStyle() {
+          const style = super.getNodeStyle();
+          return {
+            ...style,
+            fill: '#fde2e2',
+            stroke: '#f56c6c',
+            strokeWidth: 2
+          };
+        }
+      }
     });
     console.log('注册结束节点完成');
 
@@ -421,11 +454,6 @@ const initLogicFlow = async () => {
       style: {
         rect: {
           radius: 5,
-        },
-        circle: {
-          r: 25,
-          fill: '#f5f5f5',
-          stroke: '#666'
         },
         nodeText: {
           fontSize: 14,
