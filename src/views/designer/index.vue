@@ -171,7 +171,9 @@ import LogicFlow, {
   RectNode,
   RectNodeModel,
   CircleNode,
-  CircleNodeModel
+  CircleNodeModel,
+  BezierEdge,
+  BezierEdgeModel
 } from '@logicflow/core'
 import { DndPanel, MiniMap, Control, SelectionSelect } from '@logicflow/extension'
 import '@logicflow/core/dist/style/index.css'
@@ -365,7 +367,7 @@ const initializeFlow = () => {
     // 连接开始和结束节点
     if (startNode && endNode) {
       const edge = lf.value.addEdge({
-        type: 'line',
+        type: 'bezier',
         sourceNodeId: startNode.id,
         targetNodeId: endNode.id,
         properties: {}
@@ -490,11 +492,28 @@ const initLogicFlow = async () => {
           background: {
             fill: '#fff'
           }
+        },
+        edge: {
+          type: 'bezier',
+          strokeWidth: 2,
+          stroke: '#666',
+          hoverStroke: '#1890ff',
+          selectedStroke: '#1890ff',
+          outlineColor: '#fff',
+          outlineStroke: 3,
+          edgeAnimation: true
         }
       }
     });
 
     lf.value = logicFlow;
+
+    // 注册边的类型
+    lf.value.register({
+      type: 'bezier',
+      view: BezierEdge,
+      model: BezierEdgeModel
+    });
 
     // 注册节点
     registerNodes();
