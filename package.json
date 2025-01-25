@@ -12,11 +12,18 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
     "format": "prettier --write src/"
   },
-  "keywords": ["RPA", "automation", "electron", "vue"],
+  "keywords": [
+    "RPA",
+    "automation",
+    "electron",
+    "vue"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
+    "@logicflow/core": "^1.2.23",
+    "@logicflow/extension": "^1.2.23",
     "@vueuse/core": "^10.7.1",
     "electron": "28.0.0",
     "element-plus": "2.5.0",
@@ -26,9 +33,7 @@
     "puppeteer": "21.7.0",
     "sqlite3": "5.1.0",
     "vue": "3.4.0",
-    "vue-router": "4.2.0",
-    "@logicflow/core": "^1.2.23",
-    "@logicflow/extension": "^1.2.23"
+    "vue-router": "4.2.0"
   },
   "devDependencies": {
     "@playwright/test": "1.41.0",
@@ -43,6 +48,7 @@
     "eslint": "8.56.0",
     "eslint-plugin-vue": "9.19.2",
     "postcss": "^8.4.33",
+    "postcss-nesting": "^13.0.1",
     "prettier": "^3.2.4",
     "tailwindcss": "3.4.1",
     "typescript": "5.3.3",
