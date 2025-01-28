@@ -12,15 +12,29 @@ export class AutomationController {
     this.isRunning = true
 
     try {
-      // 如果浏览器未启动，则启动浏览器
-      if (!this.browser) {
+      // 检查并确保浏览器正常运行
+      if (!this.browser || !this.browser.isConnected()) {
+        if (this.browser) {
+          try {
+            await this.browser.close()
+          } catch (e) {
+            // 忽略关闭错误
+          }
+        }
         this.browser = await chromium.launch({
           headless: false
         })
       }
-      
-      // 如果页面未打开，则打开新页面
-      if (!this.page) {
+
+      // 检查并确保页面正常运行
+      if (!this.page || this.page.isClosed()) {
+        if (this.page) {
+          try {
+            await this.page.close()
+          } catch (e) {
+            // 忽略关闭错误
+          }
+        }
         this.page = await this.browser.newPage()
       }
 
