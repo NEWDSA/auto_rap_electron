@@ -197,7 +197,7 @@ import {
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
 import { FlowExecutor } from '@/utils/flow-executor'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 // 导入节点配置组件
 import BrowserConfig from '@/components/node-configs/BrowserConfig.vue'
@@ -283,6 +283,32 @@ const registerEvents = () => {
   lf.value.on('history:change', (data: { undoAble: boolean, redoAble: boolean }) => {
     canUndo.value = data.undoAble
     canRedo.value = data.redoAble
+  })
+
+  // 添加节点右键菜单事件
+  lf.value.on('node:contextmenu', (data: { data: FlowNode, e: MouseEvent }) => {
+    // 阻止默认右键菜单
+    data.e.preventDefault()
+    
+    // 如果是开始或结束节点，不允许删除
+    if (data.data.type === 'start' || data.data.type === 'end') {
+      ElMessage.warning('开始和结束节点不能删除')
+      return
+    }
+
+    // 显示确认对话框
+    ElMessageBox.confirm('确定要删除该节点吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      // 删除节点
+      lf.value?.deleteNode(data.data.id)
+      selectedNode.value = null
+      ElMessage.success('节点已删除')
+    }).catch(() => {
+      // 取消删除
+    })
   })
 }
 
