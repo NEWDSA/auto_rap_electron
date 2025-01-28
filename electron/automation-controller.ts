@@ -12,11 +12,17 @@ export class AutomationController {
     this.isRunning = true
 
     try {
-      // 启动浏览器
-      this.browser = await chromium.launch({
-        headless: false
-      })
-      this.page = await this.browser.newPage()
+      // 如果浏览器未启动，则启动浏览器
+      if (!this.browser) {
+        this.browser = await chromium.launch({
+          headless: false
+        })
+      }
+      
+      // 如果页面未打开，则打开新页面
+      if (!this.page) {
+        this.page = await this.browser.newPage()
+      }
 
       // 执行根节点
       const rootNodes = nodes.filter(node => !node.properties.parentId)
@@ -24,11 +30,14 @@ export class AutomationController {
         if (!this.isRunning) break
         await this.executeNode(node, nodes)
       }
+
+      // 执行完成后设置状态
+      this.isRunning = false
     } catch (error) {
       console.error('执行流程出错:', error)
-      throw error
-    } finally {
+      // 出错时才关闭浏览器
       await this.stop()
+      throw error
     }
   }
 
@@ -50,6 +59,10 @@ export class AutomationController {
     const { type, properties } = node
     
     switch (type) {
+      case 'start':
+      case 'end':
+        // 控制节点，不需要执行具体操作
+        break
       case 'browser':
         await this.executeBrowserNode(properties)
         break

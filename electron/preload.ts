@@ -7,6 +7,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   version: process.versions.electron,
 
   // IPC 通信
+  invoke: (channel: string, ...args: any[]) => {
+    // 白名单通道
+    const validChannels = ['flow:start', 'flow:stop']
+    if (validChannels.includes(channel)) {
+      return ipcRenderer.invoke(channel, ...args)
+    }
+    throw new Error(`不允许访问通道: ${channel}`)
+  },
   send: (channel: string, data: any) => {
     ipcRenderer.send(channel, data)
   },
