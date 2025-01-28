@@ -1,74 +1,101 @@
 <template>
-  <div class="screenshot-config">
+  <div class="space-y-4">
     <el-form-item label="截图类型">
-      <el-select
-        v-model="props.node.properties.screenshotType"
-        @change="handleChange('screenshotType')"
-      >
-        <el-option label="全页面" value="fullPage" />
+      <el-select v-model="node.properties.screenshotType" @change="handleChange">
+        <el-option label="整页截图" value="fullPage" />
         <el-option label="可视区域" value="viewport" />
-        <el-option label="指定元素" value="element" />
+        <el-option label="元素截图" value="element" />
       </el-select>
     </el-form-item>
 
-    <template v-if="props.node.properties.screenshotType === 'element'">
-      <el-form-item label="选择器">
-        <el-input
-          v-model="props.node.properties.selector"
-          @change="handleChange('selector')"
-        />
-      </el-form-item>
-    </template>
+    <el-form-item 
+      v-if="node.properties.screenshotType === 'element'" 
+      label="元素选择器"
+    >
+      <el-input 
+        v-model="node.properties.selector"
+        placeholder="请输入元素选择器，例如: #app"
+        @change="handleChange"
+      />
+    </el-form-item>
 
     <el-form-item label="保存路径">
-      <el-input
-        v-model="props.node.properties.path"
-        @change="handleChange('path')"
-      >
-        <template #append>.png</template>
-      </el-input>
+      <div class="flex space-x-2">
+        <el-input 
+          v-model="node.properties.path"
+          placeholder="请选择保存路径"
+          readonly
+        />
+        <el-button @click="handleSelectPath">选择</el-button>
+      </div>
+    </el-form-item>
+
+    <el-form-item label="图片质量">
+      <el-input-number
+        v-model="node.properties.quality"
+        :min="1"
+        :max="100"
+        @change="handleChange"
+      />
     </el-form-item>
 
     <el-form-item>
       <el-checkbox
-        v-model="props.node.properties.omitBackground"
-        @change="handleChange('omitBackground')"
+        v-model="node.properties.omitBackground"
+        @change="handleChange"
       >
         透明背景
       </el-checkbox>
-    </el-form-item>
-
-    <el-form-item label="图片质量">
-      <el-slider
-        v-model="props.node.properties.quality"
-        :min="0"
-        :max="100"
-        :step="1"
-        @change="handleChange('quality')"
-      />
     </el-form-item>
   </div>
 </template>
 
 <script setup lang="ts">
-interface Props {
-  node: {
-    properties: {
-      screenshotType?: 'fullPage' | 'viewport' | 'element'
-      selector?: string
-      path?: string
-      omitBackground?: boolean
-      quality?: number
-    }
-  }
-}
+import { onMounted } from 'vue'
+import type { FlowNode } from '@/types/node-config'
+import { ElMessage } from 'element-plus'
 
-const props = defineProps<Props>()
+const props = defineProps<{
+  node: FlowNode
+}>()
+
 const emit = defineEmits<{
   (e: 'update', key: string): void
 }>()
 
-const handleChange = (key: string) => {
-  emit('update', key)
+const handleChange = () => {
+  emit('update', 'properties')
 }
+
+const handleSelectPath = async () => {
+  try {
+    const result = await window.electronAPI.invoke('dialog:showSaveDialog', {
+      title: '选择截图保存路径',
+      defaultPath: props.node.properties.path || 'screenshot.png',
+      filters: [
+        { name: '图片', extensions: ['png', 'jpg', 'jpeg'] }
+      ]
+    })
+    
+    if (!result.canceled && result.filePath) {
+      props.node.properties.path = result.filePath
+      handleChange()
+    }
+  } catch (error) {
+    ElMessage.error('选择保存路径失败')
+  }
+}
+
+onMounted(() => {
+  // 初始化默认值
+  if (!props.node.properties.screenshotType) {
+    props.node.properties.screenshotType = 'viewport'
+  }
+  if (!props.node.properties.quality) {
+    props.node.properties.quality = 90
+  }
+  if (props.node.properties.omitBackground === undefined) {
+    props.node.properties.omitBackground = false
+  }
+})
 </script> 

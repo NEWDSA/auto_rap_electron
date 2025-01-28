@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // IPC 通信
   invoke: (channel: string, ...args: any[]) => {
     // 白名单通道
-    const validChannels = ['flow:start', 'flow:stop']
+    const validChannels = ['flow:start', 'flow:stop', 'dialog:showSaveDialog']
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
     }

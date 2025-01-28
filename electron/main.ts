@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
 import { AutomationController } from './automation-controller'
@@ -38,7 +38,7 @@ function createWindow() {
       : path.join(__dirname, '../public/logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: true,
+      nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false,
     },
@@ -73,6 +73,17 @@ ipcMain.handle('flow:stop', async () => {
   } catch (error) {
     return { success: false, error: error.message }
   }
+})
+
+// 添加文件选择对话框处理程序
+ipcMain.handle('dialog:showSaveDialog', async (_, options) => {
+  const result = await dialog.showSaveDialog({
+    filters: [
+      { name: '图片', extensions: ['png', 'jpg', 'jpeg'] }
+    ],
+    ...options
+  })
+  return result
 })
 
 // 应用程序准备就绪时创建窗口

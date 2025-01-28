@@ -275,10 +275,14 @@ export class AutomationController {
     const { screenshotType, selector, path, omitBackground, quality } = properties
     if (!path) return
 
-    const options = {
+    const options: any = {
       path,
       omitBackground: omitBackground || false,
-      quality: quality || 100
+    }
+
+    // 只有 jpg/jpeg 格式支持 quality 选项
+    if (path.toLowerCase().endsWith('.jpg') || path.toLowerCase().endsWith('.jpeg')) {
+      options.quality = quality || 100
     }
 
     switch (screenshotType) {
