@@ -95,24 +95,64 @@ export class AutomationController {
   private async executeBrowserNode(properties: NodeProperties) {
     if (!this.page) return
 
-    const { actionType, url, wait } = properties
+    const { 
+      actionType, 
+      url, 
+      waitForLoad, 
+      timeout, 
+      width, 
+      height, 
+      headless, 
+      incognito, 
+      userAgent 
+    } = properties
+    
+    // 设置浏览器窗口大小
+    if (width && height) {
+      await this.page.setViewportSize({ width, height })
+    }
+
+    // 设置用户代理
+    if (userAgent) {
+      await this.page.setExtraHTTPHeaders({ 'User-Agent': userAgent })
+    }
+
     switch (actionType) {
       case 'goto':
         if (url) {
           await this.page.goto(url)
-          if (wait) {
-            await this.page.waitForTimeout(wait * 1000)
+          if (waitForLoad && timeout) {
+            await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
           }
         }
         break
       case 'back':
         await this.page.goBack()
+        if (waitForLoad && timeout) {
+          await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
+        }
         break
       case 'forward':
         await this.page.goForward()
+        if (waitForLoad && timeout) {
+          await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
+        }
         break
       case 'reload':
         await this.page.reload()
+        if (waitForLoad && timeout) {
+          await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
+        }
+        break
+      case 'close':
+        await this.page.close()
+        this.page = null
+        break
+      case 'maximize':
+        await this.page.setViewportSize({ width: 1920, height: 1080 })
+        break
+      case 'minimize':
+        await this.page.setViewportSize({ width: 800, height: 600 })
         break
     }
   }
