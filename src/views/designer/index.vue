@@ -288,29 +288,29 @@ const registerEvents = () => {
 
 // 自定义普通节点
 class CustomNodeModel extends RectNodeModel {
-  text: any;
-  
   initNodeData(data: any) {
     super.initNodeData(data);
-    this.width = 100;
-    this.height = 50;
-    this.radius = 5;
-    this.text = {
-      value: data.properties?.name || '',
-      x: 0,
-      y: 0,
-      draggable: false,
-      editable: false
-    };
+    this.width = 120;
+    this.height = 40;
+    this.radius = 4;
+    
+    // 设置节点文本
+    if (typeof data.text === 'string') {
+      this.text.value = data.text;
+    } else if (data.properties?.name) {
+      this.text.value = data.properties.name;
+    } else {
+      this.text.value = '';
+    }
   }
 
   getNodeStyle() {
-    const style = super.getNodeStyle?.() || {};
+    const style = super.getNodeStyle();
     return {
       ...style,
       fill: '#fff',
-      stroke: '#dcdfe6',
-      strokeWidth: 1
+      stroke: '#409eff',
+      strokeWidth: 2
     };
   }
 }
@@ -323,10 +323,10 @@ class CustomNode extends RectNode {
     
     return h('rect', {
       ...style,
-      x: -width / 2,
-      y: -height / 2,
       width,
       height,
+      x: -width / 2,
+      y: -height / 2,
       rx: radius,
       ry: radius
     });
@@ -409,7 +409,6 @@ const registerNodes = () => {
         }
       }
     });
-    console.log('注册开始节点完成');
 
     // 注册结束节点
     lf.value.register({
@@ -434,7 +433,6 @@ const registerNodes = () => {
         }
       }
     });
-    console.log('注册结束节点完成');
 
     // 注册其他节点
     const registerNodeConfig = (node: NodeConfig) => {
@@ -444,8 +442,34 @@ const registerNodes = () => {
       try {
         lf.value?.register({
           type: node.type,
-          view: CustomNode,
-          model: CustomNodeModel
+          view: RectNode,
+          model: class extends RectNodeModel {
+            initNodeData(data: any) {
+              super.initNodeData(data);
+              this.width = 120;
+              this.height = 40;
+              this.radius = 4;
+              
+              // 设置节点文本
+              if (typeof data.text === 'string') {
+                this.text.value = data.text;
+              } else if (data.properties?.name) {
+                this.text.value = data.properties.name;
+              } else {
+                this.text.value = '';
+              }
+            }
+
+            getNodeStyle() {
+              const style = super.getNodeStyle();
+              return {
+                ...style,
+                fill: '#fff',
+                stroke: '#409eff',
+                strokeWidth: 2
+              };
+            }
+          }
         });
         console.log(`注册节点完成: ${node.type}`);
       } catch (error) {
@@ -544,8 +568,45 @@ const initLogicFlow = async () => {
 // 拖拽开始
 const handleDragStart = (event: DragEvent, node: NodeConfig) => {
   if (!event.dataTransfer) return
-  event.dataTransfer.setData('nodeType', node.type)
-  event.dataTransfer.effectAllowed = 'move'
+  console.log(node,'...handleDragStart...');
+  event.dataTransfer.setData('application/json', JSON.stringify(node))
+}
+
+const handleDragOver = (event: DragEvent) => {
+  event.preventDefault()
+}
+
+const handleDrop = (event: DragEvent) => {
+  event.preventDefault()
+  if (!event.dataTransfer || !lf.value) return
+
+  const data = event.dataTransfer.getData('application/json')
+  if (!data) return
+
+  const node = JSON.parse(data)
+  const { clientX, clientY } = event
+  // 获取容器的位置信息
+  const rect = flowContainer.value?.getBoundingClientRect()
+  if (!rect) return
+
+  // 计算相对于容器的坐标
+  const offsetX = clientX - rect.left
+  const offsetY = clientY - rect.top
+
+  // 创建节点数据
+  const nodeConfig = {
+    type: node.type,
+    x: offsetX,
+    y: offsetY,
+    text: node.name || '',  // 确保 text 是字符串
+    properties: {
+      name: node.name,
+      nodeType: node.type
+    }
+  }
+
+  console.log('添加节点:', nodeConfig)
+  lf.value.addNode(nodeConfig)
 }
 
 // 更新节点名称
@@ -625,11 +686,19 @@ const handleFitView = () => {
 onMounted(async () => {
   await nextTick();
   await initLogicFlow();
+  if (flowContainer.value) {
+    flowContainer.value.addEventListener('dragover', handleDragOver)
+    flowContainer.value.addEventListener('drop', handleDrop)
+  }
 });
 
 onUnmounted(() => {
   if (lf.value) {
     // lf.value.destroy();
+  }
+  if (flowContainer.value) {
+    flowContainer.value.removeEventListener('dragover', handleDragOver)
+    flowContainer.value.removeEventListener('drop', handleDrop)
   }
 });
 </script>
