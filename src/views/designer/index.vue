@@ -248,7 +248,7 @@ const controlNodes: NodeConfig[] = [
 ]
 
 // 获取节点配置组件
-const getNodeConfigComponent = computed(() => {
+const nodeConfigComponent = computed(() => {
   if (!selectedNode.value) return null
 
   const componentMap = {
@@ -458,6 +458,19 @@ const registerNodes = () => {
               } else {
                 this.text.value = '';
               }
+
+              // 初始化浏览器节点的默认属性
+              if (node.type === 'browser' && !data.properties) {
+                data.properties = {
+                  actionType: 'goto',
+                  waitForLoad: true,
+                  timeout: 30,
+                  headless: false,
+                  incognito: false,
+                  width: 1280,
+                  height: 800
+                };
+              }
             }
 
             getNodeStyle() {
@@ -598,10 +611,20 @@ const handleDrop = (event: DragEvent) => {
     type: node.type,
     x: offsetX,
     y: offsetY,
-    text: node.name || '',  // 确保 text 是字符串
+    text: node.name || '',
     properties: {
       name: node.name,
-      nodeType: node.type
+      nodeType: node.type,
+      // 浏览器节点的默认属性
+      ...(node.type === 'browser' ? {
+        actionType: 'goto',
+        waitForLoad: true,
+        timeout: 30,
+        headless: false,
+        incognito: false,
+        width: 1280,
+        height: 800
+      } : {})
     }
   }
 
@@ -618,11 +641,18 @@ const updateNodeName = () => {
 }
 
 // 更新节点属性
-const updateNodeProperty = (key: string) => {
+const handleNodePropertyChange = (key: string) => {
   if (!lf.value || !selectedNode.value) return
+  
+  // 更新节点属性
   lf.value.setProperties(selectedNode.value.id, {
     ...selectedNode.value.properties
   })
+
+  // 如果是名称变更，同时更新节点文本
+  if (key === 'name') {
+    lf.value.updateText(selectedNode.value.id, selectedNode.value.properties.name)
+  }
 }
 
 // 撤销
