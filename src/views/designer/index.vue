@@ -234,6 +234,7 @@ const flowExecutor = new FlowExecutor()
 const basicNodes: NodeConfig[] = [
   { type: 'start', name: '开始', icon: 'VideoPlay' },
   { type: 'browser', name: '浏览器', icon: 'Monitor' },
+  { type: 'click', name: '点击', icon: 'Pointer' },
   { type: 'extract', name: '提取', icon: 'Search' },
   { type: 'keyboard', name: '键盘', icon: 'EditPen' },
   { type: 'mouse', name: '鼠标', icon: 'Position' },

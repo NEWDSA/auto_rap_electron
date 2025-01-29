@@ -153,12 +153,15 @@ export class AutomationController {
       actionType, 
       url, 
       waitForLoad, 
-      timeout, 
+      timeout,
       width, 
       height, 
       headless, 
       incognito, 
-      userAgent 
+      userAgent,
+      clickSelector,
+      waitAfterClick,
+      clickTimeout
     } = properties
     
     // 设置浏览器窗口大小
@@ -177,6 +180,18 @@ export class AutomationController {
           await this.page.goto(url)
           if (waitForLoad && timeout) {
             await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
+          }
+        }
+        break
+      case 'click':
+        if (clickSelector) {
+          // 等待元素可见
+          await this.page.waitForSelector(clickSelector, { state: 'visible' })
+          // 执行点击
+          await this.page.click(clickSelector)
+          // 如果需要等待加载
+          if (waitAfterClick && clickTimeout) {
+            await this.page.waitForLoadState('networkidle', { timeout: clickTimeout * 1000 })
           }
         }
         break

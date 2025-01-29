@@ -3,6 +3,7 @@
     <el-form-item label="操作类型">
       <el-select v-model="node.properties.actionType" @change="handleChange">
         <el-option label="打开网页" value="goto" />
+        <el-option label="点击元素" value="click" />
         <el-option label="刷新页面" value="refresh" />
         <el-option label="后退" value="back" />
         <el-option label="前进" value="forward" />
@@ -21,6 +22,43 @@
         placeholder="请输入网页地址，例如: https://www.example.com"
         @change="handleChange"
       />
+    </el-form-item>
+
+    <el-form-item 
+      v-if="node.properties.actionType === 'click'" 
+      label="点击设置"
+    >
+      <div class="space-y-2">
+        <el-input
+          v-model="node.properties.clickSelector"
+          placeholder="请选择要点击的元素"
+          readonly
+          @click="openBrowserForClick"
+        >
+          <template #append>
+            <el-button @click="openBrowserForClick">选择元素</el-button>
+          </template>
+        </el-input>
+
+        <div class="flex space-x-2">
+          <el-checkbox
+            v-model="node.properties.waitAfterClick"
+            @change="handleChange"
+          >
+            点击后等待加载
+          </el-checkbox>
+        </div>
+
+        <div v-if="node.properties.waitAfterClick" class="flex space-x-2">
+          <el-input-number
+            v-model="node.properties.clickTimeout"
+            :min="1"
+            :max="60"
+            placeholder="等待时间(秒)"
+            @change="handleChange"
+          />
+        </div>
+      </div>
     </el-form-item>
 
     <el-form-item label="等待页面加载">
@@ -93,6 +131,34 @@
         打开浏览器进行元素选择
       </el-button>
     </el-form-item>
+
+    <el-form-item v-if="node.properties.selector" label="选中的元素">
+      <div class="space-y-2">
+        <el-input
+          v-model="node.properties.selector"
+          readonly
+          placeholder="已选中的元素选择器"
+        />
+        <div class="flex space-x-2">
+          <el-radio-group v-model="node.properties.extractType" @change="handleChange">
+            <el-radio label="text">文本内容</el-radio>
+            <el-radio label="html">HTML内容</el-radio>
+            <el-radio label="attribute">属性值</el-radio>
+          </el-radio-group>
+        </div>
+        <el-input
+          v-if="node.properties.extractType === 'attribute'"
+          v-model="node.properties.attributeName"
+          placeholder="请输入属性名称"
+          @change="handleChange"
+        />
+        <el-input
+          v-model="node.properties.variableName"
+          placeholder="请输入变量名称"
+          @change="handleChange"
+        />
+      </div>
+    </el-form-item>
   </div>
 </template>
 
@@ -123,6 +189,35 @@ const openBrowser = async () => {
       incognito: props.node.properties.incognito,
       userAgent: props.node.properties.userAgent
     })
+    
+    // 等待元素选择
+    const selector = await ipcRenderer.invoke('element:startPicker')
+    if (selector) {
+      props.node.properties.selector = selector
+      handleChange()
+    }
+  } catch (error) {
+    console.error('打开浏览器失败:', error)
+  }
+}
+
+const openBrowserForClick = async () => {
+  try {
+    await ipcRenderer.invoke('open-browser', {
+      url: props.node.properties.url || 'about:blank',
+      width: props.node.properties.width,
+      height: props.node.properties.height,
+      headless: false,
+      incognito: props.node.properties.incognito,
+      userAgent: props.node.properties.userAgent
+    })
+    
+    // 等待元素选择
+    const selector = await ipcRenderer.invoke('element:startPicker')
+    if (selector) {
+      props.node.properties.clickSelector = selector
+      handleChange()
+    }
   } catch (error) {
     console.error('打开浏览器失败:', error)
   }
@@ -150,6 +245,15 @@ onMounted(() => {
   }
   if (!props.node.properties.height) {
     props.node.properties.height = 800
+  }
+  if (!props.node.properties.extractType) {
+    props.node.properties.extractType = 'text'
+  }
+  if (!props.node.properties.waitAfterClick) {
+    props.node.properties.waitAfterClick = true
+  }
+  if (!props.node.properties.clickTimeout) {
+    props.node.properties.clickTimeout = 5
   }
 })
 </script> 

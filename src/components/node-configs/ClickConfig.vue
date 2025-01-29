@@ -1,66 +1,87 @@
 <template>
-  <div class="click-config">
-    <el-form-item label="选择器">
-      <el-input
-        v-model="props.node.properties.selector"
-        @change="handleChange('selector')"
-      />
-    </el-form-item>
+  <div class="space-y-4">
+    <el-form-item label="点击设置">
+      <div class="space-y-2">
+        <el-input
+          v-model="node.properties.clickSelector"
+          placeholder="请选择要点击的元素"
+          readonly
+          @click="openBrowserForClick"
+        >
+          <template #append>
+            <el-button @click="openBrowserForClick">选择元素</el-button>
+          </template>
+        </el-input>
 
-    <el-form-item label="点击类型">
-      <el-select
-        v-model="props.node.properties.clickType"
-        @change="handleChange('clickType')"
-      >
-        <el-option label="单击" value="click" />
-        <el-option label="双击" value="dblclick" />
-        <el-option label="右键" value="rightClick" />
-      </el-select>
-    </el-form-item>
+        <div class="flex space-x-2">
+          <el-checkbox
+            v-model="node.properties.waitAfterClick"
+            @change="handleChange"
+          >
+            点击后等待加载
+          </el-checkbox>
+        </div>
 
-    <el-form-item label="点击位置">
-      <el-select
-        v-model="props.node.properties.position"
-        @change="handleChange('position')"
-      >
-        <el-option label="中心" value="center" />
-        <el-option label="左上" value="topLeft" />
-        <el-option label="右上" value="topRight" />
-        <el-option label="左下" value="bottomLeft" />
-        <el-option label="右下" value="bottomRight" />
-      </el-select>
-    </el-form-item>
-
-    <el-form-item label="延迟(毫秒)">
-      <el-input-number
-        v-model="props.node.properties.delay"
-        :min="0"
-        :max="10000"
-        :step="100"
-        @change="handleChange('delay')"
-      />
+        <div v-if="node.properties.waitAfterClick" class="flex space-x-2">
+          <el-input-number
+            v-model="node.properties.clickTimeout"
+            :min="1"
+            :max="60"
+            placeholder="等待时间(秒)"
+            @change="handleChange"
+          />
+        </div>
+      </div>
     </el-form-item>
   </div>
 </template>
 
 <script setup lang="ts">
-interface Props {
-  node: {
-    properties: {
-      selector?: string
-      clickType?: 'click' | 'dblclick' | 'rightClick'
-      position?: 'center' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
-      delay?: number
-    }
-  }
-}
+import { onMounted } from 'vue'
+import type { FlowNode } from '@/types/node-config'
+import { ipcRenderer } from '@/utils/electron'
 
-const props = defineProps<Props>()
+const props = defineProps<{
+  node: FlowNode
+}>()
+
 const emit = defineEmits<{
   (e: 'update', key: string): void
 }>()
 
-const handleChange = (key: string) => {
-  emit('update', key)
+const handleChange = () => {
+  emit('update', 'properties')
 }
+
+const openBrowserForClick = async () => {
+  try {
+    await ipcRenderer.invoke('open-browser', {
+      url: props.node.properties.url || 'about:blank',
+      width: props.node.properties.width,
+      height: props.node.properties.height,
+      headless: false,
+      incognito: props.node.properties.incognito,
+      userAgent: props.node.properties.userAgent
+    })
+    
+    // 等待元素选择
+    const selector = await ipcRenderer.invoke('element:startPicker')
+    if (selector) {
+      props.node.properties.clickSelector = selector
+      handleChange()
+    }
+  } catch (error) {
+    console.error('打开浏览器失败:', error)
+  }
+}
+
+onMounted(() => {
+  // 初始化默认值
+  if (!props.node.properties.waitAfterClick) {
+    props.node.properties.waitAfterClick = true
+  }
+  if (!props.node.properties.clickTimeout) {
+    props.node.properties.clickTimeout = 5
+  }
+})
 </script> 
