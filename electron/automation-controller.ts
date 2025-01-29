@@ -7,6 +7,46 @@ export class AutomationController {
   private variables: Record<string, any> = {}
   private isRunning: boolean = false
 
+  async initBrowser(options: {
+    url?: string
+    width?: number
+    height?: number
+    headless?: boolean
+    incognito?: boolean
+    userAgent?: string
+  }) {
+    // 如果已有浏览器实例，先关闭
+    if (this.browser) {
+      try {
+        await this.browser.close()
+      } catch (e) {
+        // 忽略关闭错误
+      }
+    }
+
+    // 创建新的浏览器实例
+    this.browser = await chromium.launch({
+      headless: options.headless ?? false
+    })
+
+    // 创建新的上下文
+    const context = await this.browser.newContext({
+      viewport: options.width && options.height ? {
+        width: options.width,
+        height: options.height
+      } : undefined,
+      userAgent: options.userAgent
+    })
+
+    // 创建新的页面
+    this.page = await context.newPage()
+
+    // 如果提供了URL，则导航到该页面
+    if (options.url) {
+      await this.page.goto(options.url)
+    }
+  }
+
   async start(nodes: FlowNode[]) {
     if (this.isRunning) return
     this.isRunning = true
@@ -456,6 +496,116 @@ export class AutomationController {
         return await element.isEnabled()
       default:
         return false
+    }
+  }
+
+  async startElementPicker(): Promise<string> {
+    if (!this.page) throw new Error('浏览器未启动')
+
+    // 注入选择器脚本
+    await this.page.evaluate(() => {
+      if (window._elementPicker) return
+      
+      window._elementPicker = {
+        enabled: false,
+        hoveredElement: null,
+        originalOutline: '',
+        
+        enable() {
+          this.enabled = true
+          document.addEventListener('mouseover', this.handleMouseOver)
+          document.addEventListener('mouseout', this.handleMouseOut)
+          document.addEventListener('click', this.handleClick)
+        },
+        
+        disable() {
+          this.enabled = false
+          document.removeEventListener('mouseover', this.handleMouseOver)
+          document.removeEventListener('mouseout', this.handleMouseOut)
+          document.removeEventListener('click', this.handleClick)
+          if (this.hoveredElement) {
+            this.hoveredElement.style.outline = this.originalOutline
+          }
+        },
+        
+        handleMouseOver(event: MouseEvent) {
+          const element = event.target as HTMLElement
+          if (window._elementPicker.hoveredElement) {
+            window._elementPicker.hoveredElement.style.outline = window._elementPicker.originalOutline
+          }
+          window._elementPicker.hoveredElement = element
+          window._elementPicker.originalOutline = element.style.outline
+          element.style.outline = '2px solid #409eff'
+        },
+        
+        handleMouseOut(event: MouseEvent) {
+          const element = event.target as HTMLElement
+          element.style.outline = window._elementPicker.originalOutline
+          window._elementPicker.hoveredElement = null
+        },
+        
+        handleClick(event: MouseEvent) {
+          event.preventDefault()
+          event.stopPropagation()
+          const element = event.target as HTMLElement
+          window._elementPicker.disable()
+          window._elementPicker.generateSelector(element)
+        },
+        
+        generateSelector(element: HTMLElement) {
+          let selector = ''
+          
+          // 尝试使用 id
+          if (element.id) {
+            selector = `#${element.id}`
+          }
+          // 尝试使用 class
+          else if (element.className && typeof element.className === 'string') {
+            selector = `.${element.className.split(' ')[0]}`
+          }
+          // 使用标签名和属性
+          else {
+            selector = element.tagName.toLowerCase()
+            if (element.getAttribute('name')) {
+              selector += `[name="${element.getAttribute('name')}"]`
+            }
+          }
+          
+          window.postMessage({ type: 'ELEMENT_SELECTED', selector }, '*')
+        }
+      }
+      
+      window._elementPicker.enable()
+    })
+
+    // 等待元素选择
+    const selector = await this.page.evaluate(() => {
+      return new Promise<string>((resolve) => {
+        window.addEventListener('message', (event) => {
+          if (event.data.type === 'ELEMENT_SELECTED') {
+            resolve(event.data.selector)
+          }
+        })
+      })
+    })
+
+    return selector
+  }
+}
+
+// 扩展 window 接口
+declare global {
+  interface Window {
+    _elementPicker: {
+      enabled: boolean
+      hoveredElement: HTMLElement | null
+      originalOutline: string
+      enable(): void
+      disable(): void
+      handleMouseOver(event: MouseEvent): void
+      handleMouseOut(event: MouseEvent): void
+      handleClick(event: MouseEvent): void
+      generateSelector(element: HTMLElement): void
     }
   }
 } 

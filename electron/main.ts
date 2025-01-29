@@ -75,6 +75,16 @@ ipcMain.handle('flow:stop', async () => {
   }
 })
 
+// 添加元素选择器处理程序
+ipcMain.handle('element:startPicker', async () => {
+  try {
+    const result = await automationController.startElementPicker()
+    return result
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+})
+
 // 添加文件选择对话框处理程序
 ipcMain.handle('dialog:showSaveDialog', async (_, options) => {
   const result = await dialog.showSaveDialog({
@@ -84,6 +94,18 @@ ipcMain.handle('dialog:showSaveDialog', async (_, options) => {
     ...options
   })
   return result
+})
+
+// 添加打开浏览器处理程序
+ipcMain.handle('open-browser', async (_, options) => {
+  try {
+    if (!automationController.browser || !automationController.browser.isConnected()) {
+      await automationController.initBrowser(options)
+    }
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
 })
 
 // 应用程序准备就绪时创建窗口

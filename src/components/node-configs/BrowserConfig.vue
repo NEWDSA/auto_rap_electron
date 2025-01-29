@@ -87,12 +87,19 @@
         @change="handleChange"
       />
     </el-form-item>
+
+    <el-form-item>
+      <el-button type="primary" @click="openBrowser">
+        打开浏览器进行元素选择
+      </el-button>
+    </el-form-item>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import type { FlowNode } from '@/types/node-config'
+import { ipcRenderer } from '@/utils/electron'
 
 const props = defineProps<{
   node: FlowNode
@@ -104,6 +111,21 @@ const emit = defineEmits<{
 
 const handleChange = () => {
   emit('update', 'properties')
+}
+
+const openBrowser = async () => {
+  try {
+    await ipcRenderer.invoke('open-browser', {
+      url: props.node.properties.url || 'about:blank',
+      width: props.node.properties.width,
+      height: props.node.properties.height,
+      headless: false,
+      incognito: props.node.properties.incognito,
+      userAgent: props.node.properties.userAgent
+    })
+  } catch (error) {
+    console.error('打开浏览器失败:', error)
+  }
 }
 
 onMounted(() => {

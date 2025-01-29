@@ -1,10 +1,14 @@
 <template>
   <div class="extract-config">
     <el-form-item label="选择器">
-      <el-input
-        v-model="props.node.properties.selector"
-        @change="handleChange('selector')"
-      />
+      <div class="flex space-x-2">
+        <el-input
+          v-model="props.node.properties.selector"
+          placeholder="请输入元素选择器，例如: #app"
+          @change="handleChange('selector')"
+        />
+        <el-button @click="handleSelectElement">选择</el-button>
+      </div>
     </el-form-item>
     <el-form-item label="提取类型">
       <el-select
@@ -32,6 +36,8 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessage } from 'element-plus'
+
 interface Props {
   node: {
     properties: {
@@ -50,5 +56,17 @@ const emit = defineEmits<{
 
 const handleChange = (key: string) => {
   emit('update', key)
+}
+
+const handleSelectElement = async () => {
+  try {
+    const result = await window.electronAPI.invoke('element:startPicker')
+    if (result) {
+      props.node.properties.selector = result
+      handleChange('selector')
+    }
+  } catch (error) {
+    ElMessage.error('选择元素失败')
+  }
 }
 </script> 
