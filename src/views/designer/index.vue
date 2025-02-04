@@ -633,16 +633,79 @@ const handleDrop = (event: DragEvent) => {
   const offsetX = clientX - rect.left
   const offsetY = clientY - rect.top
 
+  // 获取画布上的所有边
+  const graphData = lf.value.getGraphData()
+  const edges = graphData.edges
+
+  // 检查是否在边上拖拽
+  const dropOnEdge = edges.find(edge => {
+    // 获取源节点和目标节点
+    const sourceNode = graphData.nodes.find(n => n.id === edge.sourceNodeId)
+    const targetNode = graphData.nodes.find(n => n.id === edge.targetNodeId)
+    
+    if (!sourceNode || !targetNode) return false
+
+    // 计算点到线段的距离
+    const distanceToLine = (x: number, y: number, x1: number, y1: number, x2: number, y2: number) => {
+      const A = x - x1
+      const B = y - y1
+      const C = x2 - x1
+      const D = y2 - y1
+      const dot = A * C + B * D
+      const lenSq = C * C + D * D
+      let param = -1
+      if (lenSq !== 0) param = dot / lenSq
+
+      let nearestX, nearestY
+      if (param < 0) {
+        nearestX = x1
+        nearestY = y1
+      } else if (param > 1) {
+        nearestX = x2
+        nearestY = y2
+      } else {
+        nearestX = x1 + param * C
+        nearestY = y1 + param * D
+      }
+
+      const dx = x - nearestX
+      const dy = y - nearestY
+      return {
+        distance: Math.sqrt(dx * dx + dy * dy),
+        x: nearestX,
+        y: nearestY
+      }
+    }
+
+    // 计算拖放点到边的最近点
+    const { distance, x: nearestX, y: nearestY } = distanceToLine(
+      offsetX,
+      offsetY,
+      sourceNode.x,
+      sourceNode.y,
+      targetNode.x,
+      targetNode.y
+    )
+
+    // 如果距离小于阈值，保存边的信息和最近点
+    if (distance < 20) {
+      edge.nearestPoint = { x: nearestX, y: nearestY }
+      edge.sourceNodeId = sourceNode.id
+      edge.targetNodeId = targetNode.id
+      return true
+    }
+    return false
+  })
+
   // 创建节点数据
   const nodeConfig = {
     type: node.type,
-    x: offsetX,
-    y: offsetY,
+    x: dropOnEdge ? dropOnEdge.nearestPoint.x : offsetX,
+    y: dropOnEdge ? dropOnEdge.nearestPoint.y : offsetY,
     text: node.name || '',
     properties: {
       name: node.name,
       nodeType: node.type,
-      // 浏览器节点的默认属性
       ...(node.type === 'browser' ? {
         actionType: 'goto',
         waitForLoad: true,
@@ -655,8 +718,41 @@ const handleDrop = (event: DragEvent) => {
     }
   }
 
-  console.log('添加节点:', nodeConfig)
-  lf.value.addNode(nodeConfig)
+  if (dropOnEdge) {
+    // 在边上拖拽，插入节点并重新连接
+    const sourceNodeId = dropOnEdge.sourceNodeId
+    const targetNodeId = dropOnEdge.targetNodeId
+
+    // 确保有源节点和目标节点
+    if (!sourceNodeId || !targetNodeId) {
+      console.error('边数据不完整')
+      return
+    }
+
+    // 先删除原有的边
+    lf.value.deleteEdge(dropOnEdge.id)
+
+    // 添加新节点
+    const newNode = lf.value.addNode(nodeConfig)
+
+    // 创建新的连接
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: sourceNodeId,
+      targetNodeId: newNode.id,
+      properties: {}
+    })
+
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: newNode.id,
+      targetNodeId: targetNodeId,
+      properties: {}
+    })
+  } else {
+    // 不在边上拖拽，直接添加节点
+    lf.value.addNode(nodeConfig)
+  }
 }
 
 // 更新节点名称
