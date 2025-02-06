@@ -141,6 +141,9 @@ export class AutomationController {
       case 'loop':
         await this.executeLoopNode(properties, node, nodes)
         break
+      case 'input':
+        await this.executeInputNode(properties)
+        break
       default:
         throw new Error(`未知的节点类型: ${type}`)
     }
@@ -605,6 +608,83 @@ export class AutomationController {
     })
 
     return selector
+  }
+
+  private async executeInputNode(properties: NodeProperties) {
+    if (!this.page) return
+
+    const {
+      selectorType,
+      selector,
+      text,
+      clearFirst,
+      simulateTyping,
+      typingDelay,
+      waitAfterInput,
+      waitTimeout
+    } = properties
+
+    if (!selector || !text) return
+
+    try {
+      // 根据选择器类型构建实际的选择器
+      let actualSelector = selector
+      switch (selectorType) {
+        case 'id':
+          actualSelector = `#${selector}`
+          break
+        case 'class':
+          actualSelector = `.${selector}`
+          break
+        case 'name':
+          actualSelector = `[name="${selector}"]`
+          break
+        case 'xpath':
+          // 使用 XPath
+          const elements = await this.page.$x(selector)
+          if (elements.length > 0) {
+            const element = elements[0]
+            // 如果需要清除原有内容
+            if (clearFirst) {
+              await element.evaluate((el: HTMLInputElement) => el.value = '')
+            }
+            // 输入文本
+            if (simulateTyping) {
+              await element.type(text, { delay: typingDelay })
+            } else {
+              await element.fill(text)
+            }
+            // 等待
+            if (waitAfterInput && waitTimeout) {
+              await this.page.waitForTimeout(waitTimeout * 1000)
+            }
+            return
+          }
+          throw new Error('未找到匹配的元素')
+      }
+
+      // 等待元素出现
+      await this.page.waitForSelector(actualSelector)
+
+      // 如果需要清除原有内容
+      if (clearFirst) {
+        await this.page.$eval(actualSelector, (el: HTMLInputElement) => el.value = '')
+      }
+
+      // 输入文本
+      if (simulateTyping) {
+        await this.page.type(actualSelector, text, { delay: typingDelay })
+      } else {
+        await this.page.fill(actualSelector, text)
+      }
+
+      // 等待
+      if (waitAfterInput && waitTimeout) {
+        await this.page.waitForTimeout(waitTimeout * 1000)
+      }
+    } catch (error) {
+      throw new Error(`输入文本失败: ${error.message}`)
+    }
   }
 }
 

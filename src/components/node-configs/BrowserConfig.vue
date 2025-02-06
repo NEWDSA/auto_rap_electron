@@ -125,40 +125,6 @@
         @change="handleChange"
       />
     </el-form-item>
-
-    <el-form-item>
-      <el-button type="primary" @click="openBrowser">
-        打开浏览器进行元素选择
-      </el-button>
-    </el-form-item>
-
-    <el-form-item v-if="node.properties.selector" label="选中的元素">
-      <div class="space-y-2">
-        <el-input
-          v-model="node.properties.selector"
-          readonly
-          placeholder="已选中的元素选择器"
-        />
-        <div class="flex space-x-2">
-          <el-radio-group v-model="node.properties.extractType" @change="handleChange">
-            <el-radio label="text">文本内容</el-radio>
-            <el-radio label="html">HTML内容</el-radio>
-            <el-radio label="attribute">属性值</el-radio>
-          </el-radio-group>
-        </div>
-        <el-input
-          v-if="node.properties.extractType === 'attribute'"
-          v-model="node.properties.attributeName"
-          placeholder="请输入属性名称"
-          @change="handleChange"
-        />
-        <el-input
-          v-model="node.properties.variableName"
-          placeholder="请输入变量名称"
-          @change="handleChange"
-        />
-      </div>
-    </el-form-item>
   </div>
 </template>
 
@@ -177,28 +143,6 @@ const emit = defineEmits<{
 
 const handleChange = () => {
   emit('update', 'properties')
-}
-
-const openBrowser = async () => {
-  try {
-    await ipcRenderer.invoke('open-browser', {
-      url: props.node.properties.url || 'about:blank',
-      width: props.node.properties.width,
-      height: props.node.properties.height,
-      headless: false,
-      incognito: props.node.properties.incognito,
-      userAgent: props.node.properties.userAgent
-    })
-    
-    // 等待元素选择
-    const selector = await ipcRenderer.invoke('element:startPicker')
-    if (selector) {
-      props.node.properties.selector = selector
-      handleChange()
-    }
-  } catch (error) {
-    console.error('打开浏览器失败:', error)
-  }
 }
 
 const openBrowserForClick = async () => {
@@ -245,9 +189,6 @@ onMounted(() => {
   }
   if (!props.node.properties.height) {
     props.node.properties.height = 800
-  }
-  if (!props.node.properties.extractType) {
-    props.node.properties.extractType = 'text'
   }
   if (!props.node.properties.waitAfterClick) {
     props.node.properties.waitAfterClick = true
