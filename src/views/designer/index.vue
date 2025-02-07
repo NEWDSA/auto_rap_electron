@@ -60,10 +60,10 @@
     <div class="flex-1 flex relative">
       <!-- 左侧工具箱 -->
       <div 
-        class="border-r bg-white flex flex-col transition-all duration-300"
+        class="left-toolbox"
         :class="{ 'w-48': !toolsPanelCollapsed, 'w-12': toolsPanelCollapsed }"
       >
-        <div class="p-2 border-b flex items-center justify-between">
+        <div class="toolbox-header">
           <span v-show="!toolsPanelCollapsed" class="text-sm">组件面板</span>
           <el-button type="text" @click="toolsPanelCollapsed = !toolsPanelCollapsed">
             <el-icon>
@@ -72,7 +72,7 @@
           </el-button>
         </div>
         
-        <div class="flex-1 overflow-y-auto" v-show="!toolsPanelCollapsed">
+        <div class="toolbox-content" v-show="!toolsPanelCollapsed">
           <div class="p-2">
             <el-collapse v-model="activeCategories">
               <el-collapse-item title="基础组件" name="basic">
@@ -118,26 +118,26 @@
       </div>
 
       <!-- 中间画布区域 -->
-      <div class="flex-1 flex flex-col">
+      <div class="flex-1 flex flex-col designer-canvas">
         <div class="flex-1 relative" ref="container">
-          <div ref="flowContainer" class="w-full h-full"></div>
+          <div ref="flowContainer" class="w-full h-full canvas-container"></div>
         </div>
       </div>
 
       <!-- 右侧属性面板 -->
       <div 
         v-if="selectedNode"
-        class="border-l bg-white flex flex-col transition-all duration-300"
+        class="properties-panel"
         :class="{ 'w-64': !propertiesPanelCollapsed, 'w-0': propertiesPanelCollapsed }"
       >
-        <div class="p-2 border-b flex items-center justify-between">
+        <div class="panel-header">
           <span class="text-sm">属性设置</span>
           <el-button type="text" @click="selectedNode = null">
             <el-icon><Close /></el-icon>
           </el-button>
         </div>
         
-        <div class="flex-1 overflow-y-auto p-4">
+        <div class="panel-content p-4">
           <el-form label-position="top">
             <el-form-item label="节点名称">
               <el-input 
@@ -158,7 +158,7 @@
     </div>
 
     <!-- 底部状态栏 -->
-    <div class="h-8 border-t flex items-center px-4 bg-gray-50">
+    <div class="h-8 border-t flex items-center bg-gray-50">
       <span class="text-sm text-gray-500">{{ statusText }}</span>
     </div>
   </div>
@@ -764,6 +764,9 @@ onUnmounted(() => {
 <style lang="postcss" scoped>
 .designer-container {
   @apply h-full flex flex-col;
+  --header-height: 64px;
+  --footer-height: 32px;
+  --toolbar-height: 44px;
 }
 
 .component-item {
@@ -793,5 +796,57 @@ onUnmounted(() => {
 .bg-grid {
   background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+/* 左侧工具箱 */
+.left-toolbox {
+  @apply border-r bg-white flex flex-col transition-all duration-300;
+  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+
+  .toolbox-header {
+    @apply p-2 border-b flex items-center justify-between;
+    height: 40px;
+  }
+
+  .toolbox-content {
+    @apply flex-1 overflow-y-auto;
+    height: calc(100% - 40px);
+  }
+}
+
+/* 右侧属性面板 */
+.properties-panel {
+  @apply border-l bg-white flex flex-col;
+  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+  transition: width 0.3s ease-in-out;
+
+  .panel-header {
+    @apply p-2 border-b flex items-center justify-between;
+    height: 40px;
+  }
+
+  .panel-content {
+    @apply flex-1 overflow-y-auto;
+    height: calc(100% - 40px);
+  }
+}
+
+/* 中间画布区域 */
+.designer-canvas {
+  @apply flex-1 relative;
+  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+  
+  .canvas-container {
+    @apply w-full h-full;
+  }
+}
+
+/* 底部状态栏样式 */
+.status-bar {
+  @apply h-8 border-t flex items-center bg-gray-50;
+  
+  .status-text {
+    @apply text-sm text-gray-500;
+  }
 }
 </style>

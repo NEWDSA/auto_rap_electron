@@ -116,18 +116,24 @@ const handleSelect = (index: string) => {
 <style lang="postcss" scoped>
 .el-container {
   @apply h-full;
+  --header-height: 64px;
+  --footer-height: 48px;
+  --toolbar-height: 44px;
 }
 
 .el-aside {
   @apply border-r dark:border-gray-700;
+  height: calc(100vh - var(--header-height));
 }
 
 .el-header {
   @apply h-16 px-4;
+  height: var(--header-height);
 }
 
 .el-main {
-  @apply p-4 overflow-auto;
+  @apply overflow-hidden p-0;
+  height: calc(100vh - var(--header-height));
 }
 
 /* 控制 Logo 尺寸 */
