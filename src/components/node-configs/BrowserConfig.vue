@@ -81,20 +81,22 @@
     </el-form-item>
 
     <el-form-item label="浏览器设置">
-      <div class="space-y-2">
-        <el-checkbox
-          v-model="node.properties.headless"
-          @change="handleChange"
-        >
-          无头模式
-        </el-checkbox>
-
-        <el-checkbox
-          v-model="node.properties.incognito"
-          @change="handleChange"
-        >
-          隐身模式
-        </el-checkbox>
+      <div class="space-y-4">
+        <div class="flex items-center space-x-4">
+          <el-button type="primary" @click="openBrowser">打开浏览器</el-button>
+          <el-checkbox
+            v-model="node.properties.headless"
+            @change="handleChange"
+          >
+            无头模式
+          </el-checkbox>
+          <el-checkbox
+            v-model="node.properties.incognito"
+            @change="handleChange"
+          >
+            隐身模式
+          </el-checkbox>
+        </div>
       </div>
     </el-form-item>
 
@@ -162,6 +164,21 @@ const openBrowserForClick = async () => {
       props.node.properties.clickSelector = selector
       handleChange()
     }
+  } catch (error) {
+    console.error('打开浏览器失败:', error)
+  }
+}
+
+const openBrowser = async () => {
+  try {
+    await ipcRenderer.invoke('open-browser', {
+      url: props.node.properties.url || 'about:blank',
+      width: props.node.properties.width,
+      height: props.node.properties.height,
+      headless: false,
+      incognito: props.node.properties.incognito,
+      userAgent: props.node.properties.userAgent
+    })
   } catch (error) {
     console.error('打开浏览器失败:', error)
   }
