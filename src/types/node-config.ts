@@ -13,17 +13,21 @@ declare module '@logicflow/core' {
     fill: string;
     stroke: string;
     strokeWidth: number;
-    getAttributes(): {
+    text: {
+      value: string;
       x: number;
       y: number;
-      width: number;
-      height: number;
-      radius: number;
-      fill: string;
-      stroke: string;
-      strokeWidth: number;
-      [key: string]: any;
+      fontSize: number;
+      color: string;
+      textAlign: string;
+      textBaseline: string;
     };
+    getNodeStyle(): Record<string, any>;
+  }
+
+  interface BezierEdgeModel {
+    strokeWidth: number;
+    getEdgeStyle(): Record<string, any>;
   }
 }
 

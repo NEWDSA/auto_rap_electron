@@ -30,29 +30,6 @@
 
         <el-divider direction="vertical" />
 
-        <!-- 视图控制按钮组 -->
-        <!-- <el-button-group>
-          <el-button @click="handleZoomOut">
-            <el-icon><Remove /></el-icon>
-            缩小
-          </el-button>
-          <el-button @click="handleZoomIn">
-            <el-icon><CirclePlus /></el-icon>
-            放大
-          </el-button>
-          <el-button @click="handleFitView">
-            <el-icon><FullScreen /></el-icon>
-            适应
-          </el-button>
-          <el-button @click="handleUndo">
-            <el-icon><Refresh class="transform rotate-180" /></el-icon>
-            上一步
-          </el-button>
-          <el-button @click="handleRedo">
-            <el-icon><Refresh /></el-icon>
-            下一步
-          </el-button>
-        </el-button-group> -->
       </div>
     </div>
 
@@ -560,13 +537,15 @@ const initLogicFlow = async () => {
         },
         edge: {
           type: 'bezier',
-          strokeWidth: 2,
           stroke: '#666',
+          strokeWidth: 2,
           hoverStroke: '#1890ff',
           selectedStroke: '#1890ff',
           outlineColor: '#fff',
           outlineStroke: 3,
-          edgeAnimation: true
+          edgeAnimation: true,
+          adjustLineDistance: true,
+          draginLimit: false
         }
       }
     });
@@ -577,7 +556,41 @@ const initLogicFlow = async () => {
     lf.value.register({
       type: 'bezier',
       view: BezierEdge,
-      model: BezierEdgeModel
+      model: class CustomBezierEdgeModel extends BezierEdgeModel {
+        initEdgeData(data: any) {
+          super.initEdgeData(data);
+          this.strokeWidth = 2;
+        }
+
+        getEdgeStyle() {
+          const style = super.getEdgeStyle();
+          return {
+            ...style,
+            strokeWidth: this.strokeWidth,
+            stroke: '#666',
+            strokeDasharray: '',
+            hoverStroke: '#1890ff',
+            selectedStroke: '#1890ff'
+          };
+        }
+
+        setProperties(properties: any) {
+          super.setProperties(properties);
+          if (properties.strokeWidth !== undefined) {
+            this.strokeWidth = properties.strokeWidth;
+          }
+        }
+
+        updateStartPoint(point: { x: number; y: number }) {
+          super.updateStartPoint(point);
+          this.initEdgeData(this);
+        }
+
+        updateEndPoint(point: { x: number; y: number }) {
+          super.updateEndPoint(point);
+          this.initEdgeData(this);
+        }
+      }
     });
 
     // 注册节点
@@ -634,6 +647,36 @@ const handleDrop = (event: DragEvent) => {
   const offsetX = clientX - rect.left
   const offsetY = clientY - rect.top
 
+  // 获取鼠标位置下的元素
+  const graphData = lf.value.getGraphData()
+  const edges = graphData.edges || []
+  
+  // 检查是否在边上
+  let targetEdge = null
+  for (const edge of edges) {
+    // 这里需要判断点是否在边的路径上
+    // 由于贝塞尔曲线的复杂性，这里使用一个简化的距离检查
+    const sourceNode = graphData.nodes.find(n => n.id === edge.sourceNodeId)
+    const targetNode = graphData.nodes.find(n => n.id === edge.targetNodeId)
+    if (!sourceNode || !targetNode) continue
+
+    // 计算点到线段的距离
+    const distance = pointToLineDistance(
+      offsetX,
+      offsetY,
+      sourceNode.x,
+      sourceNode.y,
+      targetNode.x,
+      targetNode.y
+    )
+
+    // 如果距离小于阈值，认为是在边上
+    if (distance < 20) {
+      targetEdge = edge
+      break
+    }
+  }
+
   // 创建节点数据
   const nodeConfig = {
     type: node.type,
@@ -656,8 +699,70 @@ const handleDrop = (event: DragEvent) => {
     }
   }
 
-  console.log('添加节点:', nodeConfig)
-  lf.value.addNode(nodeConfig)
+  // 添加节点
+  const newNode = lf.value.addNode(nodeConfig)
+
+  // 如果在边上，创建新的连接
+  if (targetEdge) {
+    // 删除原来的边
+    lf.value.deleteEdge(targetEdge.id)
+
+    // 创建新的边 (源节点到新节点)
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: targetEdge.sourceNodeId,
+      targetNodeId: newNode.id,
+      properties: {}
+    })
+
+    // 创建新的边 (新节点到目标节点)
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: newNode.id,
+      targetNodeId: targetEdge.targetNodeId,
+      properties: {}
+    })
+  }
+}
+
+// 计算点到线段的距离
+const pointToLineDistance = (
+  x: number,
+  y: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+) => {
+  const A = x - x1
+  const B = y - y1
+  const C = x2 - x1
+  const D = y2 - y1
+
+  const dot = A * C + B * D
+  const lenSq = C * C + D * D
+  let param = -1
+
+  if (lenSq !== 0) {
+    param = dot / lenSq
+  }
+
+  let xx, yy
+
+  if (param < 0) {
+    xx = x1
+    yy = y1
+  } else if (param > 1) {
+    xx = x2
+    yy = y2
+  } else {
+    xx = x1 + param * C
+    yy = y1 + param * D
+  }
+
+  const dx = x - xx
+  const dy = y - yy
+  return Math.sqrt(dx * dx + dy * dy)
 }
 
 // 更新节点名称
