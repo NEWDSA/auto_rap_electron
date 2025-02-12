@@ -18,7 +18,12 @@
         @click="openBrowserForSelect"
       >
         <template #append>
-          <el-button @click="openBrowserForSelect">选择元素</el-button>
+          <el-button 
+            :type="isSelecting ? 'primary' : 'default'"
+            @click="openBrowserForSelect"
+          >
+            选择元素
+          </el-button>
         </template>
       </el-input>
     </el-form-item>
@@ -86,9 +91,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import type { FlowNode } from '@/types/node-config'
 import { ipcRenderer } from '@/utils/electron'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
   node: FlowNode
@@ -98,29 +104,28 @@ const emit = defineEmits<{
   (e: 'update', key: string): void
 }>()
 
+const isSelecting = ref(false)
+
 const handleChange = () => {
   emit('update', 'properties')
 }
 
 const openBrowserForSelect = async () => {
   try {
-    await ipcRenderer.invoke('open-browser', {
-      url: props.node.properties.url || 'about:blank',
-      width: props.node.properties.width,
-      height: props.node.properties.height,
-      headless: false,
-      incognito: props.node.properties.incognito,
-      userAgent: props.node.properties.userAgent
-    })
+    isSelecting.value = true
+    ElMessage.info('请在浏览器中选择要输入的元素')
     
-    // 等待元素选择
     const selector = await ipcRenderer.invoke('element:startPicker')
     if (selector) {
       props.node.properties.selector = selector
       handleChange()
+      ElMessage.success('元素选择成功')
     }
   } catch (error) {
-    console.error('打开浏览器失败:', error)
+    console.error('选择元素失败:', error)
+    ElMessage.error(error.message || '选择元素失败')
+  } finally {
+    isSelecting.value = false
   }
 }
 

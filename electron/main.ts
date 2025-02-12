@@ -75,13 +75,24 @@ ipcMain.handle('flow:stop', async () => {
   }
 })
 
-// 添加元素选择器处理程序
+// 开始元素选择
 ipcMain.handle('element:startPicker', async () => {
   try {
-    const result = await automationController.startElementPicker()
-    return result
+    // 检查是否有活动的浏览器实例
+    if (!automationController.isBrowserOpen()) {
+      throw new Error('请先打开浏览器')
+    }
+
+    const page = automationController.getCurrentPage()
+    if (!page) {
+      throw new Error('浏览器页面未打开')
+    }
+
+    // 调用 automationController 的 startElementPicker 方法
+    return await automationController.startElementPicker()
   } catch (error) {
-    return { success: false, error: error.message }
+    console.error('元素选择失败:', error)
+    throw error
   }
 })
 

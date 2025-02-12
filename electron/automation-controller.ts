@@ -7,6 +7,21 @@ export class AutomationController {
   private variables: Record<string, any> = {}
   private isRunning: boolean = false
 
+  // 获取当前页面
+  getCurrentPage() {
+    return this.page
+  }
+
+  // 获取当前浏览器
+  getCurrentBrowser() {
+    return this.browser
+  }
+
+  // 检查浏览器是否已打开
+  isBrowserOpen() {
+    return this.browser !== null && this.page !== null && !this.page.isClosed()
+  }
+
   async initBrowser(options: {
     url?: string
     width?: number
@@ -528,9 +543,12 @@ export class AutomationController {
         enabled: false,
         hoveredElement: null,
         originalOutline: '',
+        originalCursor: '',
         
         enable() {
           this.enabled = true
+          this.originalCursor = document.body.style.cursor
+          document.body.style.cursor = 'pointer'
           document.addEventListener('mouseover', this.handleMouseOver)
           document.addEventListener('mouseout', this.handleMouseOut)
           document.addEventListener('click', this.handleClick)
@@ -538,6 +556,7 @@ export class AutomationController {
         
         disable() {
           this.enabled = false
+          document.body.style.cursor = this.originalCursor
           document.removeEventListener('mouseover', this.handleMouseOver)
           document.removeEventListener('mouseout', this.handleMouseOut)
           document.removeEventListener('click', this.handleClick)
@@ -554,11 +573,13 @@ export class AutomationController {
           window._elementPicker.hoveredElement = element
           window._elementPicker.originalOutline = element.style.outline
           element.style.outline = '2px solid #409eff'
+          element.style.outlineOffset = '1px'
         },
         
         handleMouseOut(event: MouseEvent) {
           const element = event.target as HTMLElement
           element.style.outline = window._elementPicker.originalOutline
+          element.style.outlineOffset = ''
           window._elementPicker.hoveredElement = null
         },
         
@@ -695,6 +716,7 @@ declare global {
       enabled: boolean
       hoveredElement: HTMLElement | null
       originalOutline: string
+      originalCursor: string
       enable(): void
       disable(): void
       handleMouseOver(event: MouseEvent): void
