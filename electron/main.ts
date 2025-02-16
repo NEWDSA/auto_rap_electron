@@ -79,16 +79,32 @@ ipcMain.handle('flow:stop', async () => {
 ipcMain.handle('element:startPicker', async () => {
   try {
     // 检查是否有活动的浏览器实例
-    if (!automationController.isBrowserOpen()) {
+    const browser = automationController.getCurrentBrowser()
+    const page = automationController.getCurrentPage()
+    
+    if (!browser || !browser.isConnected()) {
       throw new Error('请先打开浏览器')
     }
 
-    const page = automationController.getCurrentPage()
-    if (!page) {
-      throw new Error('浏览器页面未打开')
+    if (!page || page.isClosed()) {
+      // 获取所有上下文
+      const contexts = browser.contexts()
+      for (const context of contexts) {
+        // 获取上下文中的所有页面
+        const pages = context.pages()
+        // 如果找到活动的页面，使用第一个
+        if (pages.length > 0) {
+          const activePage = pages[0]
+          if (!activePage.isClosed()) {
+            await automationController.setCurrentPage(activePage)
+            return await automationController.startElementPicker()
+          }
+        }
+      }
+      throw new Error('请先打开页面')
     }
 
-    // 调用 automationController 的 startElementPicker 方法
+    // 调用 startElementPicker 方法
     return await automationController.startElementPicker()
   } catch (error) {
     console.error('元素选择失败:', error)
