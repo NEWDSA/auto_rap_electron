@@ -6,6 +6,9 @@ export class AutomationController {
   private page: Page | null = null
   private variables: Record<string, any> = {}
   private isRunning: boolean = false
+  private isPickingElement: boolean = false
+  private pickerLock: boolean = false
+  private pickerPromiseState: 'pending' | 'resolved' | 'rejected' | null = null
 
   // 获取当前页面
   getCurrentPage() {
@@ -19,12 +22,21 @@ export class AutomationController {
 
   // 设置当前页面
   async setCurrentPage(page: Page) {
+    // 如果正在选择元素，不允许更改页面
+    if (this.pickerLock) {
+      throw new Error('正在选择元素，不能更改页面')
+    }
     this.page = page
   }
 
   // 检查浏览器是否已打开
   isBrowserOpen() {
     return this.browser !== null && this.page !== null && !this.page.isClosed()
+  }
+
+  // 检查是否正在选择元素
+  isElementPickerActive(): boolean {
+    return this.isPickingElement || this.pickerLock
   }
 
   async initBrowser(options: {
@@ -34,19 +46,41 @@ export class AutomationController {
     headless?: boolean
     incognito?: boolean
     userAgent?: string
+    forElementPicker?: boolean
   }) {
-    // 如果已有浏览器实例，先关闭
-    if (this.browser) {
+    // 如果正在选择元素，不允许初始化新的浏览器
+    if (this.isPickingElement || this.pickerLock) {
+      throw new Error('正在选择元素，请稍后再试')
+    }
+
+    // 如果已有浏览器实例且不是元素选择器调用，则关闭现有实例
+    if (this.browser && !options.forElementPicker) {
       try {
         await this.browser.close()
       } catch (e) {
         // 忽略关闭错误
       }
+      this.browser = null
+      this.page = null
+    }
+
+    // 如果浏览器已存在且是元素选择器调用，直接返回
+    if (this.browser?.isConnected() && options.forElementPicker) {
+      return
     }
 
     // 创建新的浏览器实例
     this.browser = await chromium.launch({
       headless: options.headless ?? false
+    })
+
+    // 添加断开连接的监听
+    this.browser.on('disconnected', () => {
+      // 只有在非选择器模式下才重置状态
+      if (!this.pickerLock) {
+        this.browser = null
+        this.page = null
+      }
     })
 
     // 创建新的上下文
@@ -60,6 +94,14 @@ export class AutomationController {
 
     // 创建新的页面
     this.page = await context.newPage()
+
+    // 添加页面关闭的监听
+    this.page.on('close', () => {
+      // 只有在非选择器模式下才重置状态
+      if (!this.pickerLock) {
+        this.page = null
+      }
+    })
 
     // 如果提供了URL，则导航到该页面
     if (options.url) {
@@ -140,6 +182,9 @@ export class AutomationController {
       case 'browser':
         await this.executeBrowserNode(properties)
         break
+      case 'click':
+        await this.executeClickNode(properties)
+        break
       case 'extract':
         await this.executeExtractNode(properties)
         break
@@ -169,6 +214,83 @@ export class AutomationController {
     }
   }
 
+  private async executeClickNode(properties: NodeProperties) {
+    if (!this.page) throw new Error('浏览器未启动')
+
+    const { 
+      selector: clickSelector,
+      selectorType,
+      waitAfterClick,
+      clickTimeout
+    } = properties
+
+    let targetSelector = clickSelector
+    
+    if (!targetSelector) {
+      // 如果没有选择器，需要先选择元素
+      try {
+        const result = await this.startElementPicker()
+        targetSelector = result.selector
+        // 更新节点属性
+        properties.selector = result.selector
+        properties.selectorType = result.selectorType
+      } catch (error: any) {
+        throw new Error(`选择点击元素失败: ${error.message}`)
+      }
+    }
+
+    try {
+      // 根据选择器类型构建实际的选择器
+      let actualSelector = targetSelector
+      const currentSelectorType = selectorType || 'css'
+
+      switch (currentSelectorType) {
+        case 'id':
+          actualSelector = targetSelector.startsWith('#') ? targetSelector : `#${targetSelector}`
+          break
+        case 'class':
+          actualSelector = targetSelector.startsWith('.') ? targetSelector : `.${targetSelector}`
+          break
+        case 'name':
+          actualSelector = targetSelector.startsWith('[name="') ? targetSelector : `[name="${targetSelector}"]`
+          break
+        case 'xpath':
+          // XPath 选择器保持不变
+          break
+      }
+
+      // 等待元素可见和可交互
+      const element = await this.page.waitForSelector(actualSelector, { 
+        state: 'visible',
+        timeout: (clickTimeout || 30) * 1000 
+      })
+
+      if (!element) {
+        throw new Error('未找到可点击的元素')
+      }
+
+      // 确保元素可交互
+      await element.waitForElementState('enabled', { 
+        timeout: (clickTimeout || 30) * 1000 
+      })
+      
+      // 执行点击
+      await element.click({
+        timeout: (clickTimeout || 30) * 1000
+      })
+      
+      // 如果需要等待加载
+      if (waitAfterClick && clickTimeout) {
+        await this.page.waitForLoadState('networkidle', { 
+          timeout: clickTimeout * 1000 
+        })
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || '未知错误'
+      throw new Error(`点击元素失败: ${errorMessage}`)
+    }
+  }
+
   private async executeBrowserNode(properties: NodeProperties) {
     if (!this.page) return
 
@@ -181,10 +303,7 @@ export class AutomationController {
       height, 
       headless, 
       incognito, 
-      userAgent,
-      clickSelector,
-      waitAfterClick,
-      clickTimeout
+      userAgent
     } = properties
     
     // 设置浏览器窗口大小
@@ -203,18 +322,6 @@ export class AutomationController {
           await this.page.goto(url)
           if (waitForLoad && timeout) {
             await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
-          }
-        }
-        break
-      case 'click':
-        if (clickSelector) {
-          // 等待元素可见
-          await this.page.waitForSelector(clickSelector, { state: 'visible' })
-          // 执行点击
-          await this.page.click(clickSelector)
-          // 如果需要等待加载
-          if (waitAfterClick && clickTimeout) {
-            await this.page.waitForLoadState('networkidle', { timeout: clickTimeout * 1000 })
           }
         }
         break
@@ -537,156 +644,301 @@ export class AutomationController {
     }
   }
 
-  async startElementPicker(): Promise<string> {
+  async startElementPicker(): Promise<{ selector: string; selectorType: string }> {
     if (!this.page) throw new Error('浏览器未启动')
+    if (this.page.isClosed()) throw new Error('页面已关闭')
+    if (this.pickerPromiseState === 'pending') throw new Error('已有正在进行的元素选择')
 
-    // 移除之前可能存在的选择器
-    await this.page.evaluate(() => {
-      if (window._elementPicker) {
-        window._elementPicker.disable()
-      }
-    })
+    this.pickerPromiseState = 'pending'
+    this.isPickingElement = true
+    this.pickerLock = true
 
-    // 注入选择器脚本
-    await this.page.evaluate(() => {
-      window._elementPicker = {
-        enabled: false,
-        hoveredElement: null,
-        originalOutline: '',
-        originalCursor: '',
-        
-        enable() {
-          this.enabled = true
-          this.originalCursor = document.body.style.cursor
-          document.body.style.cursor = 'pointer'
-          document.addEventListener('mouseover', this.handleMouseOver)
-          document.addEventListener('mouseout', this.handleMouseOut)
-          document.addEventListener('click', this.handleClick, true)
-        },
-        
-        disable() {
-          this.enabled = false
-          document.body.style.cursor = this.originalCursor
-          document.removeEventListener('mouseover', this.handleMouseOver)
-          document.removeEventListener('mouseout', this.handleMouseOut)
-          document.removeEventListener('click', this.handleClick, true)
-          if (this.hoveredElement) {
-            this.hoveredElement.style.outline = this.originalOutline
+    try {
+      if (!this.page.isClosed()) {
+        await this.page.evaluate(() => {
+          if (window._elementPicker) {
+            window._elementPicker.disable()
           }
-        },
-        
-        handleMouseOver(event) {
-          const element = event.target
-          if (window._elementPicker.hoveredElement) {
-            window._elementPicker.hoveredElement.style.outline = window._elementPicker.originalOutline
-          }
-          window._elementPicker.hoveredElement = element
-          window._elementPicker.originalOutline = element.style.outline
-          element.style.outline = '2px solid #409eff'
-          element.style.outlineOffset = '1px'
-        },
-        
-        handleMouseOut(event) {
-          const element = event.target
-          element.style.outline = window._elementPicker.originalOutline
-          element.style.outlineOffset = ''
-          window._elementPicker.hoveredElement = null
-        },
-        
-        handleClick(event) {
-          if (!window._elementPicker.enabled) return
-          event.preventDefault()
-          event.stopPropagation()
-          const element = event.target
-          window._elementPicker.disable()
-          window._elementPicker.generateSelector(element)
-        },
-        
-        generateSelector(element) {
-          let selector = ''
-          let selectorType = 'css'
-          
-          // 尝试使用 id
-          if (element.id) {
-            selector = element.id
-            selectorType = 'id'
-            // 验证选择器是否唯一匹配
-            if (document.getElementById(selector)) {
-              window.postMessage({ type: 'ELEMENT_SELECTED', selector, selectorType }, '*')
-              return
+        })
+
+        await this.page.evaluate(() => {
+          window._elementPicker = {
+            enabled: false,
+            hoveredElement: null,
+            originalOutline: '',
+            originalCursor: '',
+            
+            enable() {
+              if (this.enabled) return
+              this.enabled = true
+              this.originalCursor = document.body.style.cursor
+              document.body.style.cursor = 'pointer'
+              document.addEventListener('mouseover', this.handleMouseOver.bind(this))
+              document.addEventListener('mouseout', this.handleMouseOut.bind(this))
+              document.addEventListener('click', this.handleClick.bind(this), true)
+            },
+            
+            disable() {
+              if (!this.enabled) return
+              this.enabled = false
+              document.body.style.cursor = this.originalCursor
+              document.removeEventListener('mouseover', this.handleMouseOver.bind(this))
+              document.removeEventListener('mouseout', this.handleMouseOut.bind(this))
+              document.removeEventListener('click', this.handleClick.bind(this), true)
+              if (this.hoveredElement) {
+                this.hoveredElement.style.outline = this.originalOutline
+                this.hoveredElement = null
+              }
+            },
+            
+            handleMouseOver(event: MouseEvent) {
+              if (!this.enabled) return
+              const element = event.target as HTMLElement
+              if (!element) return
+              
+              if (this.hoveredElement) {
+                this.hoveredElement.style.outline = this.originalOutline
+              }
+              this.hoveredElement = element
+              this.originalOutline = element.style.outline
+              element.style.outline = '2px solid #409eff'
+              element.style.outlineOffset = '1px'
+            },
+            
+            handleMouseOut(event: MouseEvent) {
+              if (!this.enabled) return
+              const element = event.target as HTMLElement
+              if (!element) return
+              
+              element.style.outline = this.originalOutline
+              element.style.outlineOffset = ''
+              if (this.hoveredElement === element) {
+                this.hoveredElement = null
+              }
+            },
+            
+            handleClick(event: MouseEvent) {
+              if (!this.enabled) return
+              event.preventDefault()
+              event.stopPropagation()
+              event.stopImmediatePropagation()
+              
+              const element = event.target as HTMLElement
+              if (!element) return
+              
+              const result = this.generateSelector(element)
+              this.disable()
+              
+              window.postMessage({ 
+                type: 'ELEMENT_SELECTED', 
+                selector: result.selector,
+                selectorType: result.selectorType 
+              }, '*')
+            },
+            
+            generateSelector(element: HTMLElement): { selector: string, selectorType: string } {
+              let selector = ''
+              let selectorType = 'css'
+              
+              // 尝试使用 id
+              if (element.id) {
+                selector = element.id
+                selectorType = 'id'
+                // 验证选择器是否唯一且正确匹配当前元素
+                const foundElement = document.getElementById(selector)
+                if (foundElement === element) {
+                  return { selector, selectorType }
+                }
+              }
+              
+              // 尝试使用 name 属性
+              const name = element.getAttribute('name')
+              if (name) {
+                selector = name
+                selectorType = 'name'
+                // 验证选择器是否唯一且正确匹配当前元素
+                const elements = document.getElementsByName(selector)
+                if (elements.length === 1 && elements[0] === element) {
+                  return { selector, selectorType }
+                }
+              }
+
+              // 尝试使用精确的 class 组合
+              if (element.className && typeof element.className === 'string') {
+                const classes = element.className.trim().split(/\s+/).filter(Boolean)
+                if (classes.length > 0) {
+                  selector = classes.join(' ')
+                  selectorType = 'class'
+                  // 验证选择器是否唯一且正确匹配当前元素
+                  const elements = document.getElementsByClassName(selector)
+                  if (elements.length === 1 && elements[0] === element) {
+                    return { selector, selectorType }
+                  }
+
+                  // 如果类组合不唯一，尝试与标签名组合
+                  const tagWithClass = `${element.tagName.toLowerCase()}.${classes.join('.')}`
+                  const elementsWithTag = document.querySelectorAll(tagWithClass)
+                  if (elementsWithTag.length === 1 && elementsWithTag[0] === element) {
+                    return { selector: tagWithClass, selectorType: 'css' }
+                  }
+                }
+              }
+
+              // 如果上述方法都无法唯一定位元素，使用更精确的组合选择器
+              const tag = element.tagName.toLowerCase()
+              let parent = element.parentElement
+              let path = []
+              let current = element
+
+              // 构建元素路径
+              while (parent) {
+                // 获取当前元素在同级中的索引
+                const siblings = Array.from(parent.children)
+                const index = siblings.indexOf(current) + 1
+                
+                // 尝试使用 id
+                if (current.id) {
+                  path.unshift(`#${current.id}`)
+                  break
+                }
+                
+                // 尝试使用 class
+                if (current.className && typeof current.className === 'string') {
+                  const classes = current.className.trim().split(/\s+/).filter(Boolean)
+                  if (classes.length > 0) {
+                    const classSelector = `${tag}${classes.map(c => `.${c}`).join('')}:nth-child(${index})`
+                    const elements = document.querySelectorAll(classSelector)
+                    if (elements.length === 1 && elements[0] === current) {
+                      path.unshift(classSelector)
+                      break
+                    }
+                  }
+                }
+                
+                // 使用标签名和索引
+                path.unshift(`${tag}:nth-child(${index})`)
+                
+                // 更新循环变量
+                current = parent
+                parent = parent.parentElement
+                
+                // 防止无限循环
+                if (path.length > 10) break
+              }
+              
+              selector = path.join(' > ')
+              selectorType = 'css'
+              
+              // 验证最终选择器
+              const finalElement = document.querySelector(selector)
+              if (finalElement !== element) {
+                // 如果验证失败，使用完整路径
+                const fullPath = this.getFullPath(element)
+                return { selector: fullPath, selectorType: 'css' }
+              }
+              
+              return { selector, selectorType }
+            },
+            
+            getFullPath(element: HTMLElement): string {
+              const path = []
+              let current = element
+              
+              while (current && current.nodeType === Node.ELEMENT_NODE) {
+                let selector = current.tagName.toLowerCase()
+                
+                if (current.id) {
+                  selector = `#${current.id}`
+                  path.unshift(selector)
+                  break
+                } else {
+                  let nth = 1
+                  let sibling = current
+                  
+                  while (sibling = sibling.previousElementSibling as HTMLElement) {
+                    if (sibling.tagName === current.tagName) nth++
+                  }
+                  
+                  if (nth > 1) selector += `:nth-of-type(${nth})`
+                }
+                
+                path.unshift(selector)
+                current = current.parentElement as HTMLElement
+              }
+              
+              return path.join(' > ')
             }
           }
           
-          // 尝试使用 name 属性
-          const name = element.getAttribute('name')
-          if (name) {
-            selector = name
-            selectorType = 'name'
-            // 验证选择器是否唯一匹配
-            const elements = document.getElementsByName(selector)
-            if (elements.length === 1) {
-              window.postMessage({ type: 'ELEMENT_SELECTED', selector, selectorType }, '*')
-              return
-            }
-          }
+          window._elementPicker.enable()
+        })
 
-          // 尝试使用精确的 class 组合
-          if (element.className && typeof element.className === 'string') {
-            const classes = element.className.trim().split(/\s+/)
-            if (classes.length > 0) {
-              selector = classes.join(' ')
-              selectorType = 'class'
-              // 验证选择器是否唯一匹配
-              const elements = document.getElementsByClassName(selector)
-              if (elements.length === 1) {
-                window.postMessage({ type: 'ELEMENT_SELECTED', selector, selectorType }, '*')
-                return
+        const result = await this.page.evaluate(() => {
+          return new Promise<{ selector: string, selectorType: string }>((resolve, reject) => {
+            let timeoutId: number | null = null
+            let isResolved = false
+
+            const handler = (event: MessageEvent) => {
+              if (event.data?.type === 'ELEMENT_SELECTED') {
+                cleanup()
+                isResolved = true
+                resolve({
+                  selector: event.data.selector,
+                  selectorType: event.data.selectorType
+                })
               }
             }
-          }
 
-          // 如果上述方法都无法唯一定位元素，使用组合选择器
-          const tag = element.tagName.toLowerCase()
-          let parent = element.parentElement
-          let index = 0
-          let siblings = parent ? Array.from(parent.children) : []
-          
-          siblings.forEach((sibling, i) => {
-            if (sibling === element) {
-              index = i + 1
+            const cleanup = () => {
+              window.removeEventListener('message', handler)
+              if (timeoutId !== null) {
+                clearTimeout(timeoutId)
+                timeoutId = null
+              }
+              if (window._elementPicker) {
+                window._elementPicker.disable()
+              }
+            }
+
+            window.addEventListener('message', handler)
+            window.addEventListener('unload', cleanup, { once: true })
+
+            timeoutId = window.setTimeout(() => {
+              if (!isResolved) {
+                cleanup()
+                reject(new Error('选择元素超时'))
+              }
+            }, 300000)
+          })
+        })
+
+        this.pickerPromiseState = 'resolved'
+        return result
+      } else {
+        this.pickerPromiseState = 'rejected'
+        throw new Error('页面已关闭，请重新打开页面')
+      }
+    } catch (error) {
+      this.pickerPromiseState = 'rejected'
+      try {
+        if (this.page && !this.page.isClosed()) {
+          await this.page.evaluate(() => {
+            if (window._elementPicker) {
+              window._elementPicker.disable()
             }
           })
-          
-          selector = `${tag}:nth-child(${index})`
-          selectorType = 'css'
-          
-          // 如果父元素有id，使用父元素id
-          if (parent && parent.id) {
-            selector = `${parent.id} > ${selector}`
-            selectorType = 'css'
-          }
-          
-          window.postMessage({ type: 'ELEMENT_SELECTED', selector, selectorType }, '*')
         }
+      } catch (cleanupError) {
+        // 忽略清理错误
       }
-      
-      window._elementPicker.enable()
-    })
-
-    // 等待元素选择
-    const selector = await this.page.evaluate(() => {
-      return new Promise<string>((resolve) => {
-        const handler = (event) => {
-          if (event.data.type === 'ELEMENT_SELECTED') {
-            window.removeEventListener('message', handler)
-            resolve(event.data.selector)
-          }
-        }
-        window.addEventListener('message', handler)
-      })
-    })
-
-    return selector
+      throw error
+    } finally {
+      if (this.pickerPromiseState !== 'pending') {
+        this.isPickingElement = false
+        this.pickerLock = false
+        this.pickerPromiseState = null
+      }
+    }
   }
 
   private async executeInputNode(properties: NodeProperties) {
@@ -720,12 +972,11 @@ export class AutomationController {
           break
         case 'xpath':
           // 使用 XPath
-          const elements = await this.page.$x(selector)
-          if (elements.length > 0) {
-            const element = elements[0]
+          const element = await this.page.locator(selector).first()
+          if (element) {
             // 确保元素可见和可交互
-            await element.waitForElementState('visible')
-            await element.waitForElementState('enabled')
+            await element.waitFor({ state: 'visible' })
+            await element.waitFor({ state: 'attached' })
             // 如果需要清除原有内容
             if (clearFirst) {
               await element.evaluate((el: HTMLInputElement) => {
@@ -814,7 +1065,8 @@ declare global {
       handleMouseOver(event: MouseEvent): void
       handleMouseOut(event: MouseEvent): void
       handleClick(event: MouseEvent): void
-      generateSelector(element: HTMLElement): void
+      generateSelector(element: HTMLElement): { selector: string, selectorType: string }
+      getFullPath(element: HTMLElement): string
     }
   }
 } 

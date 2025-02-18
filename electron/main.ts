@@ -83,30 +83,49 @@ ipcMain.handle('element:startPicker', async () => {
     const page = automationController.getCurrentPage()
     
     if (!browser || !browser.isConnected()) {
-      throw new Error('请先打开浏览器')
+      // 如果没有活动的浏览器实例，创建一个新的
+      await automationController.initBrowser({
+        headless: false,
+        forElementPicker: true
+      })
     }
 
+    // 如果页面已关闭，尝试获取新的活动页面
     if (!page || page.isClosed()) {
       // 获取所有上下文
       const contexts = browser.contexts()
+      let newPage = null
+      
+      // 遍历所有上下文查找可用页面
       for (const context of contexts) {
-        // 获取上下文中的所有页面
         const pages = context.pages()
-        // 如果找到活动的页面，使用第一个
-        if (pages.length > 0) {
-          const activePage = pages[0]
-          if (!activePage.isClosed()) {
-            await automationController.setCurrentPage(activePage)
-            return await automationController.startElementPicker()
+        for (const p of pages) {
+          if (!p.isClosed()) {
+            newPage = p
+            break
           }
         }
+        if (newPage) break
       }
-      throw new Error('请先打开页面')
+
+      // 如果找到了可用页面，设置为当前页面
+      if (newPage) {
+        await automationController.setCurrentPage(newPage)
+      } else {
+        // 如果没有可用页面，创建新页面
+        const context = browser.contexts()[0]
+        if (context) {
+          newPage = await context.newPage()
+          await automationController.setCurrentPage(newPage)
+        } else {
+          throw new Error('浏览器上下文无效，请重新打开浏览器')
+        }
+      }
     }
 
     // 调用 startElementPicker 方法
     return await automationController.startElementPicker()
-  } catch (error) {
+  } catch (error: any) {
     console.error('元素选择失败:', error)
     throw error
   }
@@ -126,18 +145,24 @@ ipcMain.handle('dialog:showSaveDialog', async (_, options) => {
 // 添加打开浏览器处理程序
 ipcMain.handle('open-browser', async (_, options) => {
   try {
-    if (!automationController.browser || !automationController.browser.isConnected()) {
-      await automationController.initBrowser(options)
+    const browser = automationController.getCurrentBrowser()
+    
+    // 如果正在选择元素，不允许打开新的浏览器
+    if (browser?.isConnected() && automationController.isElementPickerActive()) {
+      return { success: false, error: '正在选择元素，请稍后再试' }
     }
+    
+    await automationController.initBrowser(options)
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     return { success: false, error: error.message }
   }
 })
 
 // 应用程序准备就绪时创建窗口
 app.whenReady().then(() => {
-  launchChrome()
+  // 移除自动启动Chrome
+  // launchChrome()
   createWindow()
 
   // macOS 应用程序激活时重新创建窗口

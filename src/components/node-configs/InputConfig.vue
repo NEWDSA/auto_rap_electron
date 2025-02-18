@@ -115,9 +115,10 @@ const openBrowserForSelect = async () => {
     isSelecting.value = true
     ElMessage.info('请在浏览器中选择要输入的元素')
     
-    const selector = await ipcRenderer.invoke('element:startPicker')
-    if (selector) {
-      props.node.properties.selector = selector
+    const result = await ipcRenderer.invoke('element:startPicker')
+    if (result) {
+      props.node.properties.selector = result.selector
+      props.node.properties.selectorType = result.selectorType
       handleChange()
       ElMessage.success('元素选择成功')
     }

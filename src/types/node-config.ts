@@ -53,17 +53,50 @@ export interface CustomNodeModelProperties extends RectNodeModel {
 export interface NodeConfig {
   type: string
   name: string
-  icon: keyof typeof ElementPlusIconsVue
+  icon: string
 }
 
 export interface NodeProperties {
-  name: string
-  description?: string
+  name?: string
   nodeType?: string
+  parentId?: string
+  branchType?: 'true' | 'false'
+
+  // 浏览器节点属性
+  actionType?: 'goto' | 'back' | 'forward' | 'reload' | 'close' | 'maximize' | 'minimize'
+  url?: string
+  waitForLoad?: boolean
+  timeout?: number
+  width?: number
+  height?: number
+  headless?: boolean
+  incognito?: boolean
+  userAgent?: string
+
+  // 点击节点属性
+  selector?: string
+  selectorType?: 'css' | 'xpath' | 'id' | 'class' | 'name'
+  waitAfterClick?: boolean
+  clickTimeout?: number
+
+  // 输入节点属性
+  text?: string
+  clearFirst?: boolean
+  simulateTyping?: boolean
+  typingDelay?: number
+  waitAfterInput?: boolean
+  waitTimeout?: number
+
+  description?: string
   [key: string]: any
 }
 
-export interface FlowNode extends BaseNodeData {
+export interface FlowNode {
+  id: string
+  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop'
+  x: number
+  y: number
+  text: string
   properties: NodeProperties
 }
 
