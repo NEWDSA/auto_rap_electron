@@ -14,8 +14,7 @@
       <el-input
         v-model="node.properties.selector"
         placeholder="请选择输入元素"
-        readonly
-        @click="openBrowserForSelect"
+        @input="handleChange"
       >
         <template #append>
           <el-button 

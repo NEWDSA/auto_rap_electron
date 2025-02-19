@@ -259,6 +259,11 @@ export class AutomationController {
           break
       }
 
+      // 等待页面加载完成
+      await this.page.waitForLoadState('networkidle', { 
+        timeout: (clickTimeout || 30) * 1000 
+      })
+
       // 等待元素可见和可交互
       const element = await this.page.waitForSelector(actualSelector, { 
         state: 'visible',
@@ -273,6 +278,12 @@ export class AutomationController {
       await element.waitForElementState('enabled', { 
         timeout: (clickTimeout || 30) * 1000 
       })
+
+      // 确保元素在视图中
+      await element.scrollIntoViewIfNeeded()
+      
+      // 获取当前URL
+      const currentUrl = this.page.url()
       
       // 执行点击
       await element.click({
@@ -281,9 +292,26 @@ export class AutomationController {
       
       // 如果需要等待加载
       if (waitAfterClick && clickTimeout) {
-        await this.page.waitForLoadState('networkidle', { 
+        // 等待URL变化（针对分页场景）
+        try {
+          await this.page.waitForURL(url => url !== currentUrl, { 
+            timeout: clickTimeout * 1000,
+            waitUntil: 'networkidle'
+          })
+        } catch (error) {
+          // 如果URL没有变化，可能不是分页操作，继续等待页面加载
+          await this.page.waitForLoadState('networkidle', { 
+            timeout: clickTimeout * 1000 
+          })
+        }
+
+        // 等待页面完全加载
+        await this.page.waitForLoadState('domcontentloaded', { 
           timeout: clickTimeout * 1000 
         })
+        
+        // 额外等待以确保页面渲染完成
+        await this.page.waitForTimeout(1000)
       }
     } catch (error: any) {
       const errorMessage = error.message || '未知错误'

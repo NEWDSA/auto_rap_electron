@@ -32,8 +32,7 @@
         <el-input
           v-model="node.properties.clickSelector"
           placeholder="请选择要点击的元素"
-          readonly
-          @click="openBrowserForClick"
+          @input="handleChange"
         >
           <template #append>
             <el-button @click="openBrowserForClick">选择元素</el-button>
