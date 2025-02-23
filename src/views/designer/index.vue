@@ -187,6 +187,7 @@ import KeyboardConfig from '@/components/node-configs/KeyboardConfig.vue'
 import MouseConfig from '@/components/node-configs/MouseConfig.vue'
 import WaitConfig from '@/components/node-configs/WaitConfig.vue'
 import ScreenshotConfig from '@/components/node-configs/ScreenshotConfig.vue'
+import ScrollConfig from '@/components/node-configs/ScrollConfig.vue'
 
 // 类型定义
 import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
@@ -218,6 +219,7 @@ const basicNodes: NodeConfig[] = [
   { type: 'mouse', name: '鼠标', icon: 'Position' },
   { type: 'wait', name: '等待', icon: 'Timer' },
   { type: 'screenshot', name: '截图', icon: 'PictureRounded' },
+  { type: 'scroll', name: '滚动', icon: 'DArrowDown' },
   { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
 
@@ -240,7 +242,8 @@ const nodeConfigComponent = computed(() => {
     keyboard: KeyboardConfig,
     mouse: MouseConfig,
     wait: WaitConfig,
-    screenshot: ScreenshotConfig
+    screenshot: ScreenshotConfig,
+    scroll: ScrollConfig
   } as const
 
   const component = componentMap[selectedNode.value.type as keyof typeof componentMap]
@@ -647,32 +650,29 @@ const handleDrop = (event: DragEvent) => {
   const offsetX = clientX - rect.left
   const offsetY = clientY - rect.top
 
-  // 获取鼠标位置下的元素
+  // 获取鼠标位置下的节点
+  const point = {
+    x: offsetX,
+    y: offsetY
+  }
+
+  // 获取图数据
   const graphData = lf.value.getGraphData()
+  const nodes = graphData.nodes || []
   const edges = graphData.edges || []
-  
-  // 检查是否在边上
-  let targetEdge = null
-  for (const edge of edges) {
-    // 这里需要判断点是否在边的路径上
-    // 由于贝塞尔曲线的复杂性，这里使用一个简化的距离检查
-    const sourceNode = graphData.nodes.find(n => n.id === edge.sourceNodeId)
-    const targetNode = graphData.nodes.find(n => n.id === edge.targetNodeId)
-    if (!sourceNode || !targetNode) continue
 
-    // 计算点到线段的距离
-    const distance = pointToLineDistance(
-      offsetX,
-      offsetY,
-      sourceNode.x,
-      sourceNode.y,
-      targetNode.x,
-      targetNode.y
-    )
-
-    // 如果距离小于阈值，认为是在边上
-    if (distance < 20) {
-      targetEdge = edge
+  // 检查是否在节点上
+  let targetNode = null
+  for (const node of nodes) {
+    const { x, y, width = 120, height = 40 } = node
+    // 检查点是否在节点范围内
+    if (
+      point.x >= x - width / 2 &&
+      point.x <= x + width / 2 &&
+      point.y >= y - height / 2 &&
+      point.y <= y + height / 2
+    ) {
+      targetNode = node
       break
     }
   }
@@ -696,6 +696,54 @@ const handleDrop = (event: DragEvent) => {
         width: 1280,
         height: 800
       } : {})
+    }
+  }
+
+  // 如果目标是循环节点
+  if (targetNode && targetNode.type === 'loop') {
+    // 设置父节点ID
+    nodeConfig.properties.parentId = targetNode.id
+
+    // 获取当前循环节点的子节点数量
+    const childCount = nodes.filter(n => n.properties.parentId === targetNode.id).length
+
+    // 调整新节点的位置
+    nodeConfig.x = targetNode.x
+    nodeConfig.y = targetNode.y + 80 + childCount * 60
+
+    // 添加新节点
+    const newNode = lf.value.addNode(nodeConfig)
+
+    // 创建连接
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: targetNode.id,
+      targetNodeId: newNode.id,
+      properties: {}
+    })
+
+    return
+  }
+
+  // 检查是否在边上
+  let targetEdge = null
+  for (const edge of edges) {
+    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === edge.targetNodeId)
+    if (!sourceNode || !targetNode) continue
+
+    const distance = pointToLineDistance(
+      offsetX,
+      offsetY,
+      sourceNode.x,
+      sourceNode.y,
+      targetNode.x,
+      targetNode.y
+    )
+
+    if (distance < 20) {
+      targetEdge = edge
+      break
     }
   }
 

@@ -63,7 +63,7 @@ export interface NodeProperties {
   branchType?: 'true' | 'false'
 
   // 浏览器节点属性
-  actionType?: 'goto' | 'back' | 'forward' | 'reload' | 'close' | 'maximize' | 'minimize'
+  actionType?: 'goto' | 'back' | 'forward' | 'reload' | 'close' | 'maximize' | 'minimize' | 'moveToElement' | 'moveToPosition' | 'scrollToElement' | 'scrollToPosition' | 'scrollToTop' | 'scrollToBottom'
   url?: string
   waitForLoad?: boolean
   timeout?: number
@@ -79,6 +79,10 @@ export interface NodeProperties {
   waitAfterClick?: boolean
   clickTimeout?: number
 
+  // 滚动节点属性
+  smooth?: boolean
+  waitForScroll?: boolean
+
   // 输入节点属性
   text?: string
   clearFirst?: boolean
@@ -88,12 +92,14 @@ export interface NodeProperties {
   waitTimeout?: number
 
   description?: string
+  x?: number
+  y?: number
   [key: string]: any
 }
 
 export interface FlowNode {
   id: string
-  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop'
+  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll'
   x: number
   y: number
   text: string

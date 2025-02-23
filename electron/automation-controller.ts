@@ -209,6 +209,9 @@ export class AutomationController {
       case 'input':
         await this.executeInputNode(properties)
         break
+      case 'scroll':
+        await this.executeScrollNode(properties)
+        break
       default:
         throw new Error(`未知的节点类型: ${type}`)
     }
@@ -424,7 +427,7 @@ export class AutomationController {
   private async executeMouseNode(properties: NodeProperties) {
     if (!this.page) return
 
-    const { actionType, selector, x, y, smooth } = properties
+    const { actionType, selector, x, y } = properties
     switch (actionType) {
       case 'moveToElement':
         if (selector) {
@@ -434,20 +437,6 @@ export class AutomationController {
       case 'moveToPosition':
         if (typeof x === 'number' && typeof y === 'number') {
           await this.page.mouse.move(x, y)
-        }
-        break
-      case 'scrollToElement':
-        if (selector) {
-          await this.page.$eval(selector, (el: HTMLElement) => {
-            el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
-          })
-        }
-        break
-      case 'scrollToPosition':
-        if (typeof x === 'number' && typeof y === 'number') {
-          await this.page.evaluate(({ x, y, smooth }: { x: number, y: number, smooth?: boolean }) => {
-            window.scrollTo({ left: x, top: y, behavior: smooth ? 'smooth' : 'auto' })
-          }, { x, y, smooth })
         }
         break
     }
@@ -493,7 +482,7 @@ export class AutomationController {
       omitBackground: omitBackground || false,
     }
 
-    // 只有 jpg/jpeg 格式支持 quality 选项
+      // 只有 jpg/jpeg 格式支持 quality 选项
     if (path.toLowerCase().endsWith('.jpg') || path.toLowerCase().endsWith('.jpeg')) {
       options.quality = quality || 100
     }
@@ -1078,7 +1067,89 @@ export class AutomationController {
       throw new Error(`输入文本失败: ${errorMessage}`)
     }
   }
-}
+
+  private async executeScrollNode(properties: NodeProperties) {
+    if (!this.page) return
+
+    const { actionType, selector, x, y, smooth, waitForScroll, timeout = 30 } = properties
+
+    try {
+      switch (actionType) {
+        case 'scrollToElement':
+          if (selector) {
+            // 等待元素存在
+            await this.page.waitForSelector(selector, { timeout: timeout * 1000 })
+            
+            // 执行滚动
+            await this.page.$eval(selector, (el: HTMLElement, smooth: boolean) => {
+              el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
+            }, smooth || false)
+
+            // 如果需要等待滚动完成
+            if (waitForScroll) {
+              await this.page.waitForTimeout(1000) // 给予滚动动画完成的时间
+            }
+          }
+          break
+
+        case 'scrollToPosition':
+          if (typeof x === 'number' && typeof y === 'number') {
+            // 执行滚动
+            await this.page.evaluate(
+              ({ x, y, smooth }: { x: number; y: number; smooth?: boolean }) => {
+                window.scrollTo({
+                  left: x,
+                  top: y,
+                  behavior: smooth ? 'smooth' : 'auto'
+                })
+              },
+              { x, y, smooth }
+            )
+
+            // 如果需要等待滚动完成
+            if (waitForScroll) {
+              await this.page.waitForTimeout(1000) // 给予滚动动画完成的时间
+            }
+          }
+          break
+
+        case 'scrollToTop':
+          // 滚动到顶部
+          await this.page.evaluate((smooth: boolean) => {
+            window.scrollTo({
+              left: 0,
+              top: 0,
+              behavior: smooth ? 'smooth' : 'auto'
+            })
+          }, smooth || false)
+
+          // 如果需要等待滚动完成
+          if (waitForScroll) {
+            await this.page.waitForTimeout(1000)
+          }
+          break
+
+        case 'scrollToBottom':
+          // 滚动到底部
+          await this.page.evaluate((smooth: boolean) => {
+            window.scrollTo({
+              left: 0,
+              top: document.documentElement.scrollHeight,
+              behavior: smooth ? 'smooth' : 'auto'
+            })
+          }, smooth || false)
+
+          // 如果需要等待滚动完成
+          if (waitForScroll) {
+            await this.page.waitForTimeout(1000)
+          }
+          break
+      }
+    } catch (error: any) {
+      throw new Error(`滚动操作失败: ${error.message}`)
+    }
+  }
+}   
 
 // 扩展 window 接口
 declare global {
