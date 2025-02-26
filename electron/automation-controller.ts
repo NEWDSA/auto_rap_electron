@@ -387,29 +387,194 @@ export class AutomationController {
     }
   }
 
-  private async executeExtractNode(properties: NodeProperties) {
-    if (!this.page) return
+  private filterData(value: any, properties: NodeProperties): any {
+    const {
+      enableFilter,
+      filterType,
+      filterValue,
+      filterCaseInsensitive,
+      filterNumeric
+    } = properties
 
-    const { selector, extractType, attributeName, variableName } = properties
-    if (!selector || !variableName) return
-
-    let value: string | null = null
-    switch (extractType) {
-      case 'text':
-        value = await this.page.textContent(selector)
-        break
-      case 'attribute':
-        if (attributeName) {
-          value = await this.page.getAttribute(selector, attributeName)
-        }
-        break
-      case 'html':
-        value = await this.page.innerHTML(selector)
-        break
+    if (!enableFilter || !filterType || !filterValue) {
+      return value
     }
 
-    if (value !== null) {
-      this.variables[variableName] = value
+    const filterFunction = (item: any): boolean => {
+      let itemValue = item
+      if (typeof item === 'object') {
+        itemValue = JSON.stringify(item)
+      }
+
+      switch (filterType) {
+        case 'regex': {
+          const flags = filterCaseInsensitive ? 'i' : ''
+          try {
+            const regex = new RegExp(filterValue, flags)
+            return regex.test(String(itemValue))
+          } catch (e) {
+            console.error('正则表达式错误:', e)
+            return false
+          }
+        }
+
+        case 'contains':
+          return filterCaseInsensitive
+            ? String(itemValue).toLowerCase().includes(filterValue.toLowerCase())
+            : String(itemValue).includes(filterValue)
+
+        case 'notContains':
+          return filterCaseInsensitive
+            ? !String(itemValue).toLowerCase().includes(filterValue.toLowerCase())
+            : !String(itemValue).includes(filterValue)
+
+        case 'equals':
+          return filterCaseInsensitive
+            ? String(itemValue).toLowerCase() === filterValue.toLowerCase()
+            : String(itemValue) === filterValue
+
+        case 'notEquals':
+          return filterCaseInsensitive
+            ? String(itemValue).toLowerCase() !== filterValue.toLowerCase()
+            : String(itemValue) !== filterValue
+
+        case 'greaterThan':
+          if (filterNumeric) {
+            const numValue = Number(itemValue)
+            const numFilter = Number(filterValue)
+            return !isNaN(numValue) && !isNaN(numFilter) && numValue > numFilter
+          }
+          return String(itemValue) > filterValue
+
+        case 'lessThan':
+          if (filterNumeric) {
+            const numValue = Number(itemValue)
+            const numFilter = Number(filterValue)
+            return !isNaN(numValue) && !isNaN(numFilter) && numValue < numFilter
+          }
+          return String(itemValue) < filterValue
+
+        default:
+          return true
+      }
+    }
+
+    if (Array.isArray(value)) {
+      // 如果是数组，过滤每个元素
+      if (Array.isArray(value[0])) {
+        // 如果是二维数组（表格数据），过滤每一行
+        const headers = value[0] // 保存表头
+        const filteredRows = value.slice(1).filter(row => filterFunction(row))
+        return [headers, ...filteredRows]
+      }
+      return value.filter(filterFunction)
+    } else {
+      // 如果是单个值，直接过滤
+      return filterFunction(value) ? value : null
+    }
+  }
+
+  private async executeExtractNode(properties: NodeProperties) {
+    if (!this.page) throw new Error('浏览器未启动')
+
+    const { 
+      selector, 
+      extractType, 
+      attributeName,
+      headerSelector,
+      rowSelector,
+      cellSelector,
+      hasHeader,
+      extractInnerHTML,
+      trimContent,
+      variableName
+    } = properties
+
+    if (!selector || !variableName) return
+
+    try {
+      let value: any = null
+
+      switch (extractType) {
+        case 'text':
+          value = await this.page.textContent(selector)
+          if (trimContent && typeof value === 'string') {
+            value = value.trim()
+          }
+          break
+
+        case 'attribute':
+          if (attributeName) {
+            value = await this.page.getAttribute(selector, attributeName)
+            if (trimContent && typeof value === 'string') {
+              value = value.trim()
+            }
+          }
+          break
+
+        case 'html':
+          value = await this.page.innerHTML(selector)
+          if (trimContent && typeof value === 'string') {
+            value = value.trim()
+          }
+          break
+
+        case 'table':
+          // 提取表格数据
+          const tableData = []
+          
+          // 如果有表头
+          if (hasHeader && headerSelector) {
+            const headers = await this.page.$$eval(headerSelector, cells => 
+              cells.map(cell => cell.textContent?.trim() || '')
+            )
+            if (headers.length > 0) {
+              tableData.push(headers)
+            }
+          }
+
+          // 提取数据行
+          if (rowSelector) {
+            const rows = await this.page.$$(rowSelector)
+            for (const row of rows) {
+              const cells = cellSelector 
+                ? await row.$$(cellSelector)
+                : await row.$$('td, th')
+              
+              const rowData = await Promise.all(
+                cells.map(cell => 
+                  cell.evaluate(node => node.textContent?.trim() || '')
+                )
+              )
+              
+              tableData.push(rowData)
+            }
+          }
+          
+          value = tableData
+          break
+
+        case 'list':
+          // 提取列表数据
+          value = await this.page.$$eval(selector, (elements, extractHTML) => {
+            return elements.map(el => 
+              extractHTML ? el.innerHTML : el.textContent?.trim()
+            )
+          }, extractInnerHTML)
+          break
+
+        default:
+          throw new Error(`不支持的提取类型: ${extractType}`)
+      }
+
+      // 应用过滤
+      value = this.filterData(value, properties)
+
+      if (value !== null) {
+        this.variables[variableName] = value
+      }
+    } catch (error: any) {
+      throw new Error(`提取数据失败: ${error.message}`)
     }
   }
 
@@ -690,6 +855,8 @@ export class AutomationController {
               this.enabled = true
               this.originalCursor = document.body.style.cursor
               document.body.style.cursor = 'pointer'
+              
+              // 使用事件委托，将事件监听器绑定到document上
               document.addEventListener('mouseover', this.handleMouseOver.bind(this))
               document.addEventListener('mouseout', this.handleMouseOut.bind(this))
               document.addEventListener('click', this.handleClick.bind(this), true)
@@ -699,9 +866,13 @@ export class AutomationController {
               if (!this.enabled) return
               this.enabled = false
               document.body.style.cursor = this.originalCursor
+              
+              // 移除事件监听器
               document.removeEventListener('mouseover', this.handleMouseOver.bind(this))
               document.removeEventListener('mouseout', this.handleMouseOut.bind(this))
               document.removeEventListener('click', this.handleClick.bind(this), true)
+              
+              // 清理高亮效果
               if (this.hoveredElement) {
                 this.hoveredElement.style.outline = this.originalOutline
                 this.hoveredElement = null
@@ -711,7 +882,7 @@ export class AutomationController {
             handleMouseOver(event: MouseEvent) {
               if (!this.enabled) return
               const element = event.target as HTMLElement
-              if (!element) return
+              if (!element || element === document.body || element === document.documentElement) return
               
               if (this.hoveredElement) {
                 this.hoveredElement.style.outline = this.originalOutline
@@ -727,9 +898,9 @@ export class AutomationController {
               const element = event.target as HTMLElement
               if (!element) return
               
-              element.style.outline = this.originalOutline
-              element.style.outlineOffset = ''
               if (this.hoveredElement === element) {
+                element.style.outline = this.originalOutline
+                element.style.outlineOffset = ''
                 this.hoveredElement = null
               }
             },
@@ -741,11 +912,19 @@ export class AutomationController {
               event.stopImmediatePropagation()
               
               const element = event.target as HTMLElement
-              if (!element) return
+              if (!element || element === document.body || element === document.documentElement) return
               
               const result = this.generateSelector(element)
+              
+              // 清理高亮效果
+              if (this.hoveredElement) {
+                this.hoveredElement.style.outline = this.originalOutline
+                this.hoveredElement = null
+              }
+              
               this.disable()
               
+              // 发送选择结果
               window.postMessage({ 
                 type: 'ELEMENT_SELECTED', 
                 selector: result.selector,
@@ -888,6 +1067,16 @@ export class AutomationController {
           }
           
           window._elementPicker.enable()
+
+          // 添加键盘事件监听，按ESC键取消选择
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && window._elementPicker) {
+              window._elementPicker.disable()
+              window.postMessage({ 
+                type: 'ELEMENT_SELECTED_CANCELLED'
+              }, '*')
+            }
+          })
         })
 
         const result = await this.page.evaluate(() => {
@@ -903,6 +1092,9 @@ export class AutomationController {
                   selector: event.data.selector,
                   selectorType: event.data.selectorType
                 })
+              } else if (event.data?.type === 'ELEMENT_SELECTED_CANCELLED') {
+                cleanup()
+                reject(new Error('已取消选择'))
               }
             }
 
@@ -1147,6 +1339,154 @@ export class AutomationController {
       }
     } catch (error: any) {
       throw new Error(`滚动操作失败: ${error.message}`)
+    }
+  }
+
+  async previewExtraction(properties: NodeProperties): Promise<string | any[]> {
+    if (!this.page) throw new Error('浏览器未启动')
+
+    const { 
+      selector, 
+      extractType, 
+      attributeName,
+      headerSelector,
+      rowSelector,
+      cellSelector,
+      hasHeader,
+      extractInnerHTML,
+      trimContent,
+      selectorType
+    } = properties
+
+    if (!selector) throw new Error('请先选择要提取的元素')
+
+    try {
+      let value: any = null
+      // 根据选择器类型构建实际的选择器
+      let actualSelector = selector
+      switch (selectorType) {
+        case 'id':
+          actualSelector = selector.startsWith('#') ? selector : `#${selector}`
+          break
+        case 'class':
+          actualSelector = selector.startsWith('.') ? selector : `.${selector}`
+          break
+        case 'name':
+          actualSelector = selector.startsWith('[name="') ? selector : `[name="${selector}"]`
+          break
+        // xpath保持不变
+      }
+
+      // 等待元素出现，增加超时时间到30秒，并添加更好的错误处理
+      try {
+        await this.page.waitForSelector(actualSelector, { 
+          timeout: 30000,
+          state: 'attached'
+        })
+      } catch (error: any) {
+        if (error.name === 'TimeoutError') {
+          throw new Error('未找到匹配的元素，请检查选择器是否正确')
+        }
+        throw error
+      }
+
+      // 确保页面已加载完成
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {})
+
+      switch (extractType) {
+        case 'text':
+          // 使用 $$eval 来提取所有匹配元素的文本
+          value = await this.page.$$eval(actualSelector, elements => 
+            elements.map(el => el.textContent?.trim() || '')
+          ).catch(error => {
+            throw new Error(`提取文本失败: ${error.message}`)
+          })
+          // 如果只有一个元素，返回单个值而不是数组
+          if (Array.isArray(value) && value.length === 1) {
+            value = value[0]
+          }
+          break
+
+        case 'list':
+          value = await this.page.$$eval(actualSelector, (elements, extractHTML) => {
+            return elements.map(el => 
+              extractHTML ? el.innerHTML.trim() : el.textContent?.trim() || ''
+            ).filter(text => text !== '') // 过滤掉空字符串
+          }, extractInnerHTML).catch(error => {
+            throw new Error(`提取列表失败: ${error.message}`)
+          })
+          break
+
+        case 'attribute':
+          if (attributeName) {
+            value = await this.page.getAttribute(actualSelector, attributeName)
+            if (trimContent && typeof value === 'string') {
+              value = value.trim()
+            }
+          }
+          break
+
+        case 'html':
+          value = await this.page.innerHTML(actualSelector)
+          if (trimContent && typeof value === 'string') {
+            value = value.trim()
+          }
+          break
+
+        case 'table':
+          const tableData: string[][] = []
+          
+          if (hasHeader && headerSelector) {
+            const headers = await this.page.$$eval(headerSelector, cells => 
+              cells.map(cell => cell.textContent?.trim() || '')
+            )
+            if (headers.length > 0) {
+              tableData.push(headers)
+            }
+          }
+
+          if (rowSelector) {
+            const rows = await this.page.$$(rowSelector)
+            for (const row of rows) {
+              const cells = cellSelector 
+                ? await row.$$(cellSelector)
+                : await row.$$('td, th')
+              
+              const rowData = await Promise.all(
+                cells.map(async cell => {
+                  const text = await cell.textContent()
+                  return text?.trim() || ''
+                })
+              )
+              
+              tableData.push(rowData)
+            }
+          }
+          
+          value = tableData
+          break
+
+        default:
+          throw new Error(`不支持的提取类型: ${extractType}`)
+      }
+
+      // 应用过滤
+      value = this.filterData(value, properties)
+
+      // 确保返回的数据是可序列化的
+      if (Array.isArray(value)) {
+        return value.map(item => {
+          if (item === null || item === undefined) return ''
+          return String(item).trim()
+        }).filter(item => item !== '')
+      } else if (value === null || value === undefined) {
+        return ''
+      } else {
+        return String(value).trim()
+      }
+    } catch (error: any) {
+      console.error('提取预览失败:', error)
+      throw new Error(`提取预览失败: ${error.message}`)
     }
   }
 }   

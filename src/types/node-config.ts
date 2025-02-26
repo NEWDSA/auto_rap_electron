@@ -91,6 +91,23 @@ export interface NodeProperties {
   waitAfterInput?: boolean
   waitTimeout?: number
 
+  // 提取节点属性
+  extractType?: 'text' | 'attribute' | 'html' | 'table' | 'list'
+  selector?: string
+  selectorType?: 'css' | 'xpath' | 'id' | 'class' | 'name'
+  attributeName?: string
+  variableName?: string
+  headerSelector?: string
+  rowSelector?: string
+  cellSelector?: string
+  hasHeader?: boolean
+  extractInnerHTML?: boolean
+  trimContent?: boolean
+  columns?: Array<{
+    name: string
+    selector: string
+  }>
+
   description?: string
   x?: number
   y?: number

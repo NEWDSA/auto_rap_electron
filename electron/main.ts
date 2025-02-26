@@ -75,6 +75,16 @@ ipcMain.handle('flow:stop', async () => {
   }
 })
 
+// 添加提取预览处理程序
+ipcMain.handle('extract:preview', async (_, properties) => {
+  try {
+    const result = await automationController.previewExtraction(properties)
+    return result
+  } catch (error) {
+    throw error
+  }
+})
+
 // 开始元素选择
 ipcMain.handle('element:startPicker', async () => {
   try {
