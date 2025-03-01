@@ -69,43 +69,48 @@ export class AutomationController {
       return
     }
 
-    // 创建新的浏览器实例
-    this.browser = await chromium.launch({
-      headless: options.headless ?? false
-    })
+    try {
+      // 创建新的浏览器实例
+      this.browser = await chromium.launch({
+        headless: options.headless ?? false
+      })
 
-    // 添加断开连接的监听
-    this.browser.on('disconnected', () => {
-      // 只有在非选择器模式下才重置状态
-      if (!this.pickerLock) {
-        this.browser = null
-        this.page = null
+      // 添加断开连接的监听
+      this.browser.on('disconnected', () => {
+        // 只有在非选择器模式下才重置状态
+        if (!this.pickerLock) {
+          this.browser = null
+          this.page = null
+        }
+      })
+
+      // 创建新的上下文
+      const context = await this.browser.newContext({
+        viewport: options.width && options.height ? {
+          width: options.width,
+          height: options.height
+        } : undefined,
+        userAgent: options.userAgent
+      })
+
+      // 创建新的页面
+      this.page = await context.newPage()
+
+      // 添加页面关闭的监听
+      this.page.on('close', () => {
+        // 只有在非选择器模式下才重置状态
+        if (!this.pickerLock) {
+          this.page = null
+        }
+      })
+
+      // 如果提供了URL，则导航到该页面
+      if (options.url) {
+        await this.page.goto(options.url)
       }
-    })
-
-    // 创建新的上下文
-    const context = await this.browser.newContext({
-      viewport: options.width && options.height ? {
-        width: options.width,
-        height: options.height
-      } : undefined,
-      userAgent: options.userAgent
-    })
-
-    // 创建新的页面
-    this.page = await context.newPage()
-
-    // 添加页面关闭的监听
-    this.page.on('close', () => {
-      // 只有在非选择器模式下才重置状态
-      if (!this.pickerLock) {
-        this.page = null
-      }
-    })
-
-    // 如果提供了URL，则导航到该页面
-    if (options.url) {
-      await this.page.goto(options.url)
+    } catch (error) {
+      console.error('初始化浏览器失败:', error)
+      throw error
     }
   }
 
@@ -579,14 +584,90 @@ export class AutomationController {
   }
 
   private async executeKeyboardNode(properties: NodeProperties) {
-    if (!this.page) return
+    if (!this.page) throw new Error('页面未打开')
 
-    const { key, modifiers = [], text } = properties
-    if (key) {
-      await this.page.keyboard.press(key)
-    } else if (text) {
-      await this.page.keyboard.type(text)
+    const { 
+      keyboardActionType, 
+      key, 
+      modifiers = [], 
+      text, 
+      simulateTyping, 
+      typingDelay, 
+      waitAfterInput, 
+      waitTimeout,
+      selector
+    } = properties
+
+    try {
+      // 如果提供了选择器，先定位和聚焦元素
+      let element = null
+      if (selector) {
+        element = await this.page.locator(selector).first()
+        await element.waitFor({ state: 'visible', timeout: 30000 })
+        await element.scrollIntoViewIfNeeded()
+        await element.focus()
+      }
+
+      switch (keyboardActionType) {
+        case 'press':
+          if (key) {
+            if (modifiers && modifiers.length > 0) {
+              // 使用组合键语法 (例如: 'Control+A', 'Shift+Tab')
+              const modifierKey = modifiers.map(mod => this.normalizeModifierKey(mod)).join('+')
+              const combinedKey = `${modifierKey}+${key}`
+              await this.page.keyboard.press(combinedKey)
+            } else {
+              // 处理特殊键 (例如: 'Enter', 'F11', 'Tab')
+              await this.page.keyboard.press(key)
+            }
+
+            // 特殊处理：如果是 Enter 键，等待页面变化
+            if (key.toLowerCase() === 'enter') {
+              await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {})
+            }
+          }
+          break
+
+        case 'type':
+          if (text) {
+            if (element) {
+              if (simulateTyping) {
+                // 使用 pressSequentially 进行逐字符输入，模拟人工输入
+                await element.pressSequentially(text, { delay: typingDelay || 100 })
+              } else {
+                // 使用 fill 进行快速输入
+                await element.fill(text)
+              }
+            } else {
+              // 如果没有目标元素，使用 keyboard.type
+              await this.page.keyboard.type(text, { delay: simulateTyping ? (typingDelay || 100) : 0 })
+            }
+          }
+          break
+      }
+
+      // 处理等待时间
+      if (waitAfterInput && waitTimeout) {
+        await this.page.waitForTimeout(waitTimeout)
+      }
+    } catch (error) {
+      console.error('键盘操作失败:', error)
+      throw new Error(`键盘操作失败: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  // 辅助方法：规范化修饰键名称
+  private normalizeModifierKey(modifier: string): string {
+    const modifierMap: { [key: string]: string } = {
+      'Control': 'Control',
+      'Ctrl': 'Control',
+      'Alt': 'Alt',
+      'Shift': 'Shift',
+      'Meta': 'Meta',
+      'Command': 'Meta',
+      'Win': 'Meta'
+    }
+    return modifierMap[modifier] || modifier
   }
 
   private async executeMouseNode(properties: NodeProperties) {

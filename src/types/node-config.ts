@@ -63,7 +63,7 @@ export interface NodeProperties {
   branchType?: 'true' | 'false'
 
   // 浏览器节点属性
-  actionType?: 'goto' | 'back' | 'forward' | 'reload' | 'close' | 'maximize' | 'minimize' | 'moveToElement' | 'moveToPosition' | 'scrollToElement' | 'scrollToPosition' | 'scrollToTop' | 'scrollToBottom'
+  browserActionType?: 'goto' | 'back' | 'forward' | 'reload' | 'close' | 'maximize' | 'minimize'
   url?: string
   waitForLoad?: boolean
   timeout?: number
@@ -72,6 +72,11 @@ export interface NodeProperties {
   headless?: boolean
   incognito?: boolean
   userAgent?: string
+
+  // 鼠标和滚动节点属性
+  mouseActionType?: 'moveToElement' | 'moveToPosition' | 'scrollToElement' | 'scrollToPosition' | 'scrollToTop' | 'scrollToBottom'
+  x?: number
+  y?: number
 
   // 点击节点属性
   selector?: string
@@ -91,10 +96,13 @@ export interface NodeProperties {
   waitAfterInput?: boolean
   waitTimeout?: number
 
+  // 键盘节点属性
+  keyboardActionType?: 'press' | 'combination' | 'type'
+  key?: string
+  modifiers?: string[]
+
   // 提取节点属性
   extractType?: 'text' | 'attribute' | 'html' | 'table' | 'list'
-  selector?: string
-  selectorType?: 'css' | 'xpath' | 'id' | 'class' | 'name'
   attributeName?: string
   variableName?: string
   headerSelector?: string
@@ -109,8 +117,6 @@ export interface NodeProperties {
   }>
 
   description?: string
-  x?: number
-  y?: number
   [key: string]: any
 }
 

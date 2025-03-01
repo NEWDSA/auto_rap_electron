@@ -100,37 +100,10 @@ ipcMain.handle('element:startPicker', async () => {
       })
     }
 
-    // 如果页面已关闭，尝试获取新的活动页面
-    if (!page || page.isClosed()) {
-      // 获取所有上下文
-      const contexts = browser.contexts()
-      let newPage = null
-      
-      // 遍历所有上下文查找可用页面
-      for (const context of contexts) {
-        const pages = context.pages()
-        for (const p of pages) {
-          if (!p.isClosed()) {
-            newPage = p
-            break
-          }
-        }
-        if (newPage) break
-      }
-
-      // 如果找到了可用页面，设置为当前页面
-      if (newPage) {
-        await automationController.setCurrentPage(newPage)
-      } else {
-        // 如果没有可用页面，创建新页面
-        const context = browser.contexts()[0]
-        if (context) {
-          newPage = await context.newPage()
-          await automationController.setCurrentPage(newPage)
-        } else {
-          throw new Error('浏览器上下文无效，请重新打开浏览器')
-        }
-      }
+    // 获取当前页面
+    const currentPage = automationController.getCurrentPage()
+    if (!currentPage || currentPage.isClosed()) {
+      throw new Error('无法获取有效的页面，请确保浏览器已打开')
     }
 
     // 调用 startElementPicker 方法
@@ -167,6 +140,17 @@ ipcMain.handle('open-browser', async (_, options) => {
   } catch (error: any) {
     return { success: false, error: error.message }
   }
+})
+
+// 添加全屏切换处理程序
+ipcMain.handle('window:toggleFullscreen', () => {
+  const win = BrowserWindow.getFocusedWindow()
+  if (win) {
+    const isFullScreen = win.isFullScreen()
+    win.setFullScreen(!isFullScreen)
+    return { success: true, isFullScreen: !isFullScreen }
+  }
+  return { success: false, error: '无法获取窗口' }
 })
 
 // 应用程序准备就绪时创建窗口
