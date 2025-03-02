@@ -7,6 +7,10 @@ import pinia from './store'
 import 'element-plus/dist/index.css'
 import './styles/tailwind.css'
 import './styles/index.css'
+import { initializeIpcHandlers } from './utils/ipcHandlers'
+
+// 初始化IPC处理程序
+initializeIpcHandlers()
 
 const app = createApp(App)
 

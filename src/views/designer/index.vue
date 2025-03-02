@@ -188,6 +188,7 @@ import MouseConfig from '@/components/node-configs/MouseConfig.vue'
 import WaitConfig from '@/components/node-configs/WaitConfig.vue'
 import ScreenshotConfig from '@/components/node-configs/ScreenshotConfig.vue'
 import ScrollConfig from '@/components/node-configs/ScrollConfig.vue'
+import ExportConfig from '@/components/node-configs/ExportConfig.vue'
 
 // 类型定义
 import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
@@ -220,6 +221,7 @@ const basicNodes: NodeConfig[] = [
   { type: 'wait', name: '等待', icon: 'Timer' },
   { type: 'screenshot', name: '截图', icon: 'PictureRounded' },
   { type: 'scroll', name: '滚动', icon: 'DArrowDown' },
+  { type: 'export', name: '导出', icon: 'Download' },
   { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
 
@@ -243,7 +245,8 @@ const nodeConfigComponent = computed(() => {
     mouse: MouseConfig,
     wait: WaitConfig,
     screenshot: ScreenshotConfig,
-    scroll: ScrollConfig
+    scroll: ScrollConfig,
+    export: ExportConfig
   } as const
 
   const component = componentMap[selectedNode.value.type as keyof typeof componentMap]

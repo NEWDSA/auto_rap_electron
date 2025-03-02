@@ -111,18 +111,31 @@ export interface NodeProperties {
   hasHeader?: boolean
   extractInnerHTML?: boolean
   trimContent?: boolean
+  waitForVisible?: boolean
+  timeout?: number
   columns?: Array<{
     name: string
     selector: string
   }>
 
   description?: string
+
+  // 导出相关属性
+  exportType?: 'excel' | 'csv' | 'json'
+  fileName?: string
+  dataSource?: 'variable' | 'extract'
+  sheetName?: string
+  delimiter?: string
+  includeHeaders?: boolean
+  encoding?: string
+  saveMode?: 'auto' | 'select'
+
   [key: string]: any
 }
 
 export interface FlowNode {
   id: string
-  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll'
+  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export'
   x: number
   y: number
   text: string

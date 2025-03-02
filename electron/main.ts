@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
 import { AutomationController } from './automation-controller'
+import fs from 'fs/promises'
 
 // 是否是开发环境
 const isDev = process.env.NODE_ENV === 'development'
@@ -114,15 +115,72 @@ ipcMain.handle('element:startPicker', async () => {
   }
 })
 
-// 添加文件选择对话框处理程序
+// 添加文件保存对话框处理程序
 ipcMain.handle('dialog:showSaveDialog', async (_, options) => {
-  const result = await dialog.showSaveDialog({
-    filters: [
-      { name: '图片', extensions: ['png', 'jpg', 'jpeg'] }
-    ],
-    ...options
-  })
-  return result
+  try {
+    const { fileName = 'export' } = options || {}
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '保存文件',
+      defaultPath: fileName,
+      filters: [
+        { name: 'Excel 文件', extensions: ['xlsx'] },
+        { name: 'CSV 文件', extensions: ['csv'] },
+        { name: 'JSON 文件', extensions: ['json'] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    })
+    
+    if (canceled || !filePath) {
+      return null
+    }
+    
+    return filePath
+  } catch (error: unknown) {
+    console.error('显示保存对话框失败:', error)
+    return null
+  }
+})
+
+// 添加选择文件夹对话框处理程序
+ipcMain.handle('dialog:showOpenDirectoryDialog', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '选择保存文件夹',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    
+    if (canceled || !filePaths || filePaths.length === 0) {
+      return null
+    }
+    
+    return filePaths[0]  // 返回选择的文件夹路径
+  } catch (error: unknown) {
+    console.error('显示文件夹选择对话框失败:', error)
+    return null
+  }
+})
+
+// 添加文件写入处理程序
+ipcMain.handle('fs:writeFile', async (_, filePath, content) => {
+  try {
+    // 如果内容是Buffer，直接写入
+    if (Buffer.isBuffer(content)) {
+      await fs.writeFile(filePath, content)
+    } 
+    // 如果内容是字符串，直接写入
+    else if (typeof content === 'string') {
+      await fs.writeFile(filePath, content, 'utf-8')
+    } 
+    // 如果是其他类型，转为JSON字符串
+    else {
+      await fs.writeFile(filePath, JSON.stringify(content), 'utf-8')
+    }
+    
+    return { success: true }
+  } catch (error: unknown) {
+    console.error('写入文件失败:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
 })
 
 // 添加打开浏览器处理程序

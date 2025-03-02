@@ -214,6 +214,24 @@
     </template>
 
     <el-form-item>
+      <el-checkbox
+        v-model="props.node.properties.waitForVisible"
+        @change="handleChange('waitForVisible')"
+      >
+        等待元素可见
+      </el-checkbox>
+    </el-form-item>
+
+    <el-form-item label="超时时间(秒)">
+      <el-input-number
+        v-model="props.node.properties.timeout"
+        :min="1"
+        :max="300"
+        @change="handleChange('timeout')"
+      />
+    </el-form-item>
+
+    <el-form-item>
       <el-button type="primary" @click="handlePreview">
         预览提取结果
       </el-button>
@@ -264,6 +282,8 @@ interface Props {
       filterValue?: string
       filterCaseInsensitive?: boolean
       filterNumeric?: boolean
+      waitForVisible?: boolean
+      timeout?: number
     }
   }
 }
@@ -386,6 +406,14 @@ const getFilterPlaceholder = (filterType?: string) => {
     default:
       return '请输入过滤条件'
   }
+}
+
+// 初始化默认值
+if (!props.node.properties.timeout) {
+  props.node.properties.timeout = 30
+}
+if (props.node.properties.waitForVisible === undefined) {
+  props.node.properties.waitForVisible = true
 }
 </script>
 

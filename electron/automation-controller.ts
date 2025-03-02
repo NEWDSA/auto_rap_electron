@@ -1,5 +1,6 @@
 import { chromium, Browser, Page } from 'playwright'
 import type { FlowNode, NodeProperties } from '../src/types/node-config'
+import { ExportUtils } from '../src/utils/exportUtils'
 
 export class AutomationController {
   private browser: Browser | null = null
@@ -9,6 +10,7 @@ export class AutomationController {
   private isPickingElement: boolean = false
   private pickerLock: boolean = false
   private pickerPromiseState: 'pending' | 'resolved' | 'rejected' | null = null
+  private lastExtractedData: any = null
 
   // 获取当前页面
   getCurrentPage() {
@@ -216,6 +218,9 @@ export class AutomationController {
         break
       case 'scroll':
         await this.executeScrollNode(properties)
+        break
+      case 'export':
+        await this.executeExportNode(properties)
         break
       default:
         throw new Error(`未知的节点类型: ${type}`)
@@ -492,13 +497,31 @@ export class AutomationController {
       hasHeader,
       extractInnerHTML,
       trimContent,
-      variableName
+      variableName,
+      waitForVisible,
+      timeout = 30 // 默认30秒
     } = properties
 
-    if (!selector || !variableName) return
+    // 记录提取信息
+    console.log(`开始执行提取节点: 选择器=${selector}, 提取类型=${extractType}, 变量名=${variableName || '未设置'}`)
+
+    // 检查选择器是否存在
+    if (!selector) {
+      console.log('提取失败: 选择器未设置')
+      throw new Error('提取选择器未设置')
+    }
 
     try {
       let value: any = null
+
+      // 使用新的等待选项
+      const waitOptions = {
+        state: waitForVisible ? 'visible' : 'attached',
+        timeout: (timeout * 1000) // 转换为毫秒
+      }
+      console.log(`等待选择器 ${selector} 出现，超时时间 ${timeout} 秒`)
+      await this.page.waitForSelector(selector, waitOptions)
+      console.log(`选择器 ${selector} 已找到`)
 
       switch (extractType) {
         case 'text':
@@ -572,13 +595,29 @@ export class AutomationController {
           throw new Error(`不支持的提取类型: ${extractType}`)
       }
 
+      console.log(`原始提取数据: ${value !== null ? (Array.isArray(value) ? `数组(长度=${value.length})` : `${typeof value}`) : 'null'}`)
+
       // 应用过滤
       value = this.filterData(value, properties)
+      console.log(`过滤后数据: ${value !== null ? (Array.isArray(value) ? `数组(长度=${value.length})` : `${typeof value}`) : 'null'}`)
 
       if (value !== null) {
-        this.variables[variableName] = value
+        // 始终保存最后提取的数据，无论是否有变量名
+        this.lastExtractedData = value
+        console.log('数据已保存为最后提取的数据', value ? '数据长度: ' + (Array.isArray(value) ? value.length : '1') : '无数据')
+        
+        // 如果有变量名，则保存到变量
+        if (variableName) {
+          this.variables[variableName] = value
+          console.log(`数据已保存到变量: ${variableName}`, value ? '数据长度: ' + (Array.isArray(value) ? value.length : '1') : '无数据')
+        } else {
+          console.log('未指定变量名，数据仅保存为最后提取的数据')
+        }
+      } else {
+        console.log('过滤后数据为null，没有保存数据')
       }
     } catch (error: any) {
+      console.log(`提取数据失败: ${error.message}`)
       throw new Error(`提取数据失败: ${error.message}`)
     }
   }
@@ -1568,6 +1607,101 @@ export class AutomationController {
     } catch (error: any) {
       console.error('提取预览失败:', error)
       throw new Error(`提取预览失败: ${error.message}`)
+    }
+  }
+
+  private async executeExportNode(properties: NodeProperties) {
+    const {
+      exportType,
+      fileName,
+      dataSource,
+      variableName,
+      sheetName,
+      delimiter,
+      includeHeaders,
+      encoding,
+      saveMode = 'auto',  // 默认为自动保存
+      savePath            // 预设的保存路径
+    } = properties
+
+    console.log(`开始执行导出节点, 数据源: ${dataSource}${dataSource === 'variable' ? ', 变量名: ' + variableName : ''}`)
+    console.log(`导出模式: ${saveMode}${saveMode === 'select' ? '(手动选择保存位置)' : '(自动保存)'}`)
+    if (savePath) {
+      console.log(`预设保存路径: ${savePath}`)
+    }
+    
+    // 添加重试逻辑，等待提取数据
+    let data;
+    let retryCount = 0;
+    const maxRetries = 5; // 增加到5次重试
+    const retryDelay = 1000; // 增加到1000毫秒
+
+    while (retryCount < maxRetries) {
+      // 获取要导出的数据
+      if (dataSource === 'variable' && variableName) {
+        data = this.variables[variableName];
+        console.log(`尝试从变量获取数据 [${retryCount+1}/${maxRetries}]: `, variableName, data ? '找到数据' : '未找到数据')
+      } else if (dataSource === 'extract') {
+        data = this.lastExtractedData;
+        console.log(`尝试获取最后提取的数据 [${retryCount+1}/${maxRetries}]: `, data ? '找到数据' : '未找到数据')
+      }
+
+      // 如果找到数据，退出循环
+      if (data) {
+        console.log('成功获取数据，数据类型: ', typeof data, Array.isArray(data) ? '数组长度: ' + data.length : '')
+        break;
+      }
+
+      console.log(`未找到数据，等待 ${retryDelay}ms 后重试...`)
+      // 等待一段时间再重试
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      retryCount++;
+    }
+
+    if (!data) {
+      console.log('所有重试均失败，没有找到要导出的数据')
+      throw new Error('没有找到要导出的数据');
+    }
+
+    // 确保数据是数组
+    if (!Array.isArray(data)) {
+      data = [data];
+    }
+
+    // 执行导出
+    try {
+      console.log('准备导出数据，通过IPC发送到渲染进程...');
+      
+      // 检查我们是否有可用的WebContents来发送IPC消息
+      const { BrowserWindow } = require('electron');
+      const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+      
+      if (!win) {
+        throw new Error('找不到有效的浏览器窗口来执行导出');
+      }
+      
+      // 记录完整的导出选项
+      console.log(`完整导出选项: saveMode=${saveMode}, savePath=${savePath || '未设置'}, exportType=${exportType}, fileName=${fileName || 'export'}`);
+      
+      // 使用IPC向渲染进程发送导出请求
+      win.webContents.send('automation:export-data', {
+        data,
+        options: {
+          type: exportType,
+          fileName: fileName || 'export',
+          sheetName,
+          delimiter,
+          includeHeaders,
+          encoding,
+          saveMode: saveMode,        // 直接使用传入的saveMode
+          savePath: savePath         // 传递预设的保存路径
+        }
+      });
+      
+      console.log('导出请求已发送到渲染进程');
+    } catch (error) {
+      console.error('导出过程中出错:', error);
+      throw new Error(`导出失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }   
