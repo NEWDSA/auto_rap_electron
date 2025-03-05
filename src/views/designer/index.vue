@@ -30,6 +30,17 @@
 
         <el-divider direction="vertical" />
 
+        <el-button-group>
+          <el-button 
+            :type="isRecording ? 'danger' : 'primary'"
+            @click="toggleRecording"
+          >
+            <el-icon>
+              <component :is="isRecording ? 'VideoPause' : 'VideoPlay'" />
+            </el-icon>
+            {{ isRecording ? '停止录制' : '开始录制' }}
+          </el-button>
+        </el-button-group>
       </div>
     </div>
 
@@ -134,6 +145,63 @@
       </div>
     </div>
 
+    <!-- 录制预览对话框 -->
+    <el-dialog
+      v-model="showRecordPreview"
+      title="录制结果预览"
+      width="80%"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
+      <div class="space-y-4">
+        <div class="text-sm text-gray-500">
+          共录制 {{ recordedActions.length }} 个动作
+        </div>
+
+        <el-table :data="recordedActions" style="width: 100%">
+          <el-table-column prop="type" label="类型" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getActionTypeTag(row.type)">
+                {{ getActionTypeLabel(row.type) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="selector" label="选择器" width="200">
+            <template #default="{ row }">
+              <span v-if="row.selector">{{ row.selector }}</span>
+              <span v-else class="text-gray-400">-</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="value" label="值" width="200">
+            <template #default="{ row }">
+              <span v-if="row.value">{{ row.value }}</span>
+              <span v-else-if="row.x !== undefined && row.y !== undefined">
+                x: {{ row.x }}, y: {{ row.y }}
+              </span>
+              <span v-else class="text-gray-400">-</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="timestamp" label="时间" width="180">
+            <template #default="{ row }">
+              {{ formatTimestamp(row.timestamp) }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showRecordPreview = false">取消</el-button>
+          <el-button type="primary" @click="generateWorkflow">
+            生成工作流
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 底部状态栏 -->
     <div class="h-8 border-t flex items-center bg-gray-50">
       <span class="text-sm text-gray-500">{{ statusText }}</span>
@@ -169,12 +237,29 @@ import {
   Tools,
   Operation,
   RefreshLeft,
-  RefreshRight
+  RefreshRight,
+  Back,
+  Right,
+  Monitor,
+  Pointer,
+  EditPen,
+  Search,
+  Position,
+  Timer,
+  PictureRounded,
+  ArrowDown,
+  Download,
+  SwitchButton,
+  Setting,
+  Refresh,
+  CloseBold
 } from '@element-plus/icons-vue'
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
 import { FlowExecutor } from '@/utils/flow-executor'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { RecorderService, type RecordedAction } from '@/services/RecorderService'
+import dayjs from 'dayjs'
 
 // 导入节点配置组件
 import BrowserConfig from '@/components/node-configs/BrowserConfig.vue'
@@ -201,14 +286,17 @@ const canUndo = ref(false)
 const canRedo = ref(false)
 const flowContainer = ref<HTMLElement | null>(null)
 const minimapContainer = ref<HTMLElement | null>(null)
-const lf = ref<InstanceType<typeof LogicFlow> | null>(null)
+const lf = ref<LogicFlow | null>(null)
 const toolsPanelCollapsed = ref(false)
 const propertiesPanelCollapsed = ref(false)
 const isRunning = ref(false)
 const statusText = ref('')
 
-// 流程执行器实例
-const flowExecutor = new FlowExecutor()
+// 录制相关状态
+const isRecording = ref(false)
+const recordedActions = ref<RecordedAction[]>([])
+const showRecordPreview = ref(false)
+const recorder = RecorderService.getInstance()
 
 const basicNodes: NodeConfig[] = [
   { type: 'start', name: '开始', icon: 'VideoPlay' },
@@ -220,7 +308,7 @@ const basicNodes: NodeConfig[] = [
   { type: 'mouse', name: '鼠标', icon: 'Position' },
   { type: 'wait', name: '等待', icon: 'Timer' },
   { type: 'screenshot', name: '截图', icon: 'PictureRounded' },
-  { type: 'scroll', name: '滚动', icon: 'DArrowDown' },
+  { type: 'scroll', name: '滚动', icon: 'ArrowDown' },
   { type: 'export', name: '导出', icon: 'Download' },
   { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
@@ -896,10 +984,76 @@ const handleFitView = () => {
   lf.value.focusOn()
 }
 
+// 切换录制状态
+const toggleRecording = async () => {
+  try {
+    if (!isRecording.value) {
+      // 开始录制
+      await recorder.startRecording()
+      isRecording.value = true
+    } else {
+      // 停止录制
+      const nodes = await recorder.stopRecording()
+      isRecording.value = false
+      recordedActions.value = recorder.getRecordedActions()
+      showRecordPreview.value = true
+
+      // 如果有节点生成，则添加到流程图中
+      if (nodes && nodes.length > 0) {
+        nodes.forEach(node => {
+          lf.value?.addNode(node)
+        })
+      }
+    }
+  } catch (error) {
+    console.error('录制操作失败:', error)
+    ElMessage.error('录制操作失败')
+  }
+}
+
+// 生成工作流
+const generateWorkflow = () => {
+  showRecordPreview.value = false
+  ElMessage.success('工作流生成成功')
+}
+
+// 获取动作类型标签
+const getActionTypeLabel = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    click: '点击',
+    input: '输入',
+    scroll: '滚动',
+    keypress: '按键',
+    mouseMove: '移动'
+  }
+  return typeMap[type] || type
+}
+
+// 获取动作类型标签样式
+const getActionTypeTag = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    click: 'primary',
+    input: 'success',
+    scroll: 'warning',
+    keypress: 'info',
+    mouseMove: ''
+  }
+  return typeMap[type] || ''
+}
+
+// 格式化时间戳
+const formatTimestamp = (timestamp: number): string => {
+  return dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss.SSS')
+}
+
 // 生命周期钩子
-onMounted(async () => {
-  await nextTick();
-  await initLogicFlow();
+onMounted(() => {
+  if (!flowContainer.value) return;
+  
+  // 初始化 LogicFlow
+  initLogicFlow();
+
+  // 添加事件监听
   if (flowContainer.value) {
     flowContainer.value.addEventListener('dragover', handleDragOver)
     flowContainer.value.addEventListener('drop', handleDrop)
@@ -919,34 +1073,38 @@ onUnmounted(() => {
 
 <style lang="postcss" scoped>
 .designer-container {
-  @apply h-full flex flex-col;
-  --header-height: 64px;
-  --footer-height: 32px;
-  --toolbar-height: 44px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .component-item {
-  @apply flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded cursor-move hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors;
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  background-color: #f9fafb;
+  border-radius: 0.375rem;
+  cursor: move;
+  transition: background-color 0.2s;
+}
+
+.component-item:hover {
+  background-color: #f3f4f6;
 }
 
 .custom-node {
-  @apply flex items-center space-x-2 p-2 bg-white dark:bg-gray-800 rounded border dark:border-gray-700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: white;
+  border-radius: 0.375rem;
+  border: 1px solid #e5e7eb;
 }
 
-:deep(.lf-element-selected) .custom-node {
-  @apply ring-2 ring-blue-500;
-}
-
-:deep(.el-collapse) {
-  @apply border-0;
-}
-
-:deep(.el-collapse-item__header) {
-  @apply bg-transparent border-0 font-medium;
-}
-
-:deep(.el-collapse-item__content) {
-  @apply p-0 border-0;
+.lf-element-selected .custom-node {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
 }
 
 .bg-grid {
@@ -954,55 +1112,65 @@ onUnmounted(() => {
   background-size: 24px 24px;
 }
 
-/* 左侧工具箱 */
 .left-toolbox {
-  @apply border-r bg-white flex flex-col transition-all duration-300;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
-
-  .toolbox-header {
-    @apply p-2 border-b flex items-center justify-between;
-    height: 40px;
-  }
-
-  .toolbox-content {
-    @apply flex-1 overflow-y-auto;
-    height: calc(100% - 40px);
-  }
+  border-right: 1px solid #e5e7eb;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s;
 }
 
-/* 右侧属性面板 */
+.toolbox-header {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+}
+
+.toolbox-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .properties-panel {
-  @apply border-l bg-white flex flex-col;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+  border-left: 1px solid #e5e7eb;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
   transition: width 0.3s ease-in-out;
-
-  .panel-header {
-    @apply p-2 border-b flex items-center justify-between;
-    height: 40px;
-  }
-
-  .panel-content {
-    @apply flex-1 overflow-y-auto;
-    height: calc(100% - 40px);
-  }
 }
 
-/* 中间画布区域 */
+.panel-header {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
 .designer-canvas {
-  @apply flex-1 relative;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
-  
-  .canvas-container {
-    @apply w-full h-full;
-  }
+  flex: 1;
+  position: relative;
 }
 
-/* 底部状态栏样式 */
-.status-bar {
-  @apply h-8 border-t flex items-center bg-gray-50;
-  
-  .status-text {
-    @apply text-sm text-gray-500;
-  }
+.canvas-container {
+  width: 100%;
+  height: 100%;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1rem;
 }
 </style>
