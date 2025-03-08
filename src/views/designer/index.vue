@@ -143,6 +143,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, h, computed, markRaw, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import LogicFlow, { 
   NodeModel,
   RectNode,
@@ -209,6 +210,9 @@ const statusText = ref('')
 
 // 流程执行器实例
 const flowExecutor = new FlowExecutor()
+
+// 路由对象
+const route = useRoute()
 
 const basicNodes: NodeConfig[] = [
   { type: 'start', name: '开始', icon: 'VideoPlay' },
@@ -925,6 +929,13 @@ const handleFitView = () => {
 onMounted(async () => {
   await nextTick();
   await initLogicFlow();
+  
+  // 检查是否有任务ID参数，如果有则加载该任务
+  const taskId = route.query.id
+  if (taskId) {
+    await loadFlowFromDatabase(Number(taskId))
+  }
+  
   if (flowContainer.value) {
     flowContainer.value.addEventListener('dragover', handleDragOver)
     flowContainer.value.addEventListener('drop', handleDrop)
@@ -940,6 +951,40 @@ onUnmounted(() => {
     flowContainer.value.removeEventListener('drop', handleDrop)
   }
 });
+
+// 从数据库加载流程
+const loadFlowFromDatabase = async (id: number) => {
+  if (!lf.value) return
+  
+  try {
+    statusText.value = '正在加载流程...'
+    
+    // 从数据库获取流程配置
+    const result = await window.electronAPI.invoke('get-configuration', id)
+    
+    if (result && result.success && result.data) {
+      // 设置流程名称
+      flowName.value = result.data.name
+      
+      // 解析流程数据
+      const flowData = JSON.parse(result.data.content)
+      
+      // 清空当前画布
+      lf.value.clearData()
+      
+      // 加载流程数据
+      lf.value.render(flowData)
+      
+      statusText.value = `已加载流程: ${flowName.value}`
+      ElMessage.success('流程加载成功')
+    } else {
+      throw new Error(result?.error || '加载失败')
+    }
+  } catch (error: any) {
+    statusText.value = '加载流程失败'
+    ElMessage.error(`加载流程失败: ${error.message}`)
+  }
+}
 </script>
 
 <style lang="postcss" scoped>

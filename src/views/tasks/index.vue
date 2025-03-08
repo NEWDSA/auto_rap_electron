@@ -34,6 +34,7 @@
       border
       stripe
       @selection-change="handleSelectionChange"
+      v-loading="loading"
     >
       <el-table-column type="selection" width="55" />
       <el-table-column label="任务名称" prop="name" min-width="200" />
@@ -87,8 +88,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 // 搜索
 const searchQuery = ref('')
@@ -96,31 +100,55 @@ const searchQuery = ref('')
 // 分页
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(100)
+const total = ref(0)
+
+// 加载状态
+const loading = ref(false)
 
 // 选中的任务
 const selectedTasks = ref<any[]>([])
 
-// 模拟任务数据
-const tasks = ref([
-  {
-    id: 1,
-    name: '自动填表任务',
-    status: 'running',
-    createTime: '2024-01-20 10:00:00',
-    lastRunTime: '2024-01-20 15:30:00',
-    runCount: 5
-  },
-  {
-    id: 2,
-    name: '数据采集任务',
-    status: 'stopped',
-    createTime: '2024-01-19 14:00:00',
-    lastRunTime: '2024-01-20 09:15:00',
-    runCount: 12
-  },
-  // 更多任务数据...
-])
+// 任务数据
+const tasks = ref<any[]>([])
+
+// 从数据库加载任务
+const loadTasksFromDatabase = async () => {
+  loading.value = true
+  try {
+    const result = await window.electronAPI.invoke('get-all-configurations')
+    if (result.success) {
+      // 将数据库结果转换为任务格式
+      tasks.value = result.data.map((config: any) => {
+        // 尝试解析存储的内容
+        let content = null
+        try {
+          content = JSON.parse(config.content)
+        } catch (e) {
+          console.error('解析任务内容失败:', e)
+          content = { error: '无效的任务内容' }
+        }
+        
+        return {
+          id: config.id,
+          name: config.name,
+          status: 'stopped', // 默认状态
+          createTime: new Date(config.created_at).toLocaleString(),
+          lastRunTime: config.updated_at ? new Date(config.updated_at).toLocaleString() : '-',
+          runCount: 0, // 默认执行次数
+          content: content // 存储完整配置用于启动任务
+        }
+      })
+      total.value = tasks.value.length
+    } else {
+      ElMessage.error('加载任务失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('加载任务出错:', error)
+    ElMessage.error('加载任务出错')
+  } finally {
+    loading.value = false
+  }
+}
 
 // 根据搜索过滤任务
 const filteredTasks = computed(() => {
@@ -158,40 +186,109 @@ const handleSelectionChange = (selection: any[]) => {
 
 // 刷新列表
 const handleRefresh = () => {
-  // TODO: 实现刷新逻辑
-  console.log('刷新任务列表')
+  loadTasksFromDatabase()
+  ElMessage.success('刷新成功')
+}
+
+// 启动任务
+const startTask = async (task: any) => {
+  try {
+    const result = await window.electronAPI.invoke('flow:start', task.content)
+    if (result.success) {
+      // 更新任务状态
+      task.status = 'running'
+      ElMessage.success('任务启动成功')
+    } else {
+      ElMessage.error('任务启动失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('启动任务出错:', error)
+    ElMessage.error('启动任务出错')
+  }
+}
+
+// 停止任务
+const stopTask = async (task: any) => {
+  try {
+    const result = await window.electronAPI.invoke('flow:stop')
+    if (result.success) {
+      // 更新任务状态
+      task.status = 'stopped'
+      ElMessage.success('任务停止成功')
+    } else {
+      ElMessage.error('任务停止失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('停止任务出错:', error)
+    ElMessage.error('停止任务出错')
+  }
 }
 
 // 批量启动
-const handleBatchStart = () => {
+const handleBatchStart = async () => {
   if (!selectedTasks.value.length) {
     ElMessage.warning('请选择要启动的任务')
     return
   }
-  console.log('批量启动任务:', selectedTasks.value)
+  
+  try {
+    for (const task of selectedTasks.value) {
+      await startTask(task)
+    }
+    ElMessage.success('批量启动任务成功')
+  } catch (error) {
+    console.error('批量启动任务出错:', error)
+    ElMessage.error('批量启动任务出错')
+  }
 }
 
 // 批量停止
-const handleBatchStop = () => {
+const handleBatchStop = async () => {
   if (!selectedTasks.value.length) {
     ElMessage.warning('请选择要停止的任务')
     return
   }
-  console.log('批量停止任务:', selectedTasks.value)
+  
+  try {
+    for (const task of selectedTasks.value) {
+      if (task.status === 'running') {
+        await stopTask(task)
+      }
+    }
+    ElMessage.success('批量停止任务成功')
+  } catch (error) {
+    console.error('批量停止任务出错:', error)
+    ElMessage.error('批量停止任务出错')
+  }
 }
 
 // 单个任务操作
-const handleTaskAction = (task: any) => {
+const handleTaskAction = async (task: any) => {
   if (task.status === 'running') {
-    console.log('停止任务:', task)
+    await stopTask(task)
   } else {
-    console.log('启动任务:', task)
+    await startTask(task)
   }
 }
 
 // 编辑任务
-const handleEdit = (task: any) => {
-  console.log('编辑任务:', task)
+const handleEdit = async (task: any) => {
+  try {
+    // 获取完整的任务配置
+    const result = await window.electronAPI.invoke('get-configuration', task.id)
+    if (result.success) {
+      // 导航到流程设计器页面，并传递任务ID
+      router.push({
+        path: '/designer',
+        query: { id: task.id }
+      })
+    } else {
+      ElMessage.error('获取任务配置失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('编辑任务出错:', error)
+    ElMessage.error('编辑任务出错')
+  }
 }
 
 // 删除任务
@@ -204,11 +301,28 @@ const handleDelete = (task: any) => {
       cancelButtonText: '取消',
       type: 'warning',
     }
-  ).then(() => {
-    console.log('删除任务:', task)
-    ElMessage.success('删除成功')
+  ).then(async () => {
+    try {
+      const result = await window.electronAPI.invoke('delete-configuration', task.id)
+      if (result.success) {
+        // 从列表中移除任务
+        tasks.value = tasks.value.filter(t => t.id !== task.id)
+        total.value = tasks.value.length
+        ElMessage.success('删除成功')
+      } else {
+        ElMessage.error('删除失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('删除任务出错:', error)
+      ElMessage.error('删除任务出错')
+    }
   }).catch(() => {})
 }
+
+// 组件挂载时加载任务
+onMounted(() => {
+  loadTasksFromDatabase()
+})
 </script>
 
 <style lang="postcss" scoped>
