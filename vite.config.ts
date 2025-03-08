@@ -2,7 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
-import { resolve } from 'path'
+import { join } from 'path'
+import commonjs from '@rollup/plugin-commonjs'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -12,6 +13,26 @@ export default defineConfig({
       {
         // 主进程入口文件
         entry: 'electron/main.ts',
+        vite: {
+          build: {
+            sourcemap: true,
+            minify: false,
+            rollupOptions: {
+              external: ['sqlite3'],
+              plugins: [
+                commonjs({
+                  dynamicRequireTargets: [
+                    'node_modules/sqlite3/**/*.node'
+                  ],
+                  ignoreDynamicRequires: true
+                })
+              ],
+              output: {
+                format: 'cjs'
+              }
+            }
+          }
+        }
       },
       {
         entry: 'electron/preload.ts',
@@ -20,16 +41,18 @@ export default defineConfig({
         },
       },
     ]),
-    renderer(),
+    renderer({
+      nodeIntegration: true
+    }),
   ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@components': resolve(__dirname, 'src/components'),
-      '@views': resolve(__dirname, 'src/views'),
-      '@store': resolve(__dirname, 'src/store'),
-      '@utils': resolve(__dirname, 'src/utils'),
-      '@assets': resolve(__dirname, 'src/assets'),
+      '@': join(__dirname, 'src'),
+      '@components': join(__dirname, 'src/components'),
+      '@views': join(__dirname, 'src/views'),
+      '@store': join(__dirname, 'src/store'),
+      '@utils': join(__dirname, 'src/utils'),
+      '@assets': join(__dirname, 'src/assets'),
     },
   },
   server: {

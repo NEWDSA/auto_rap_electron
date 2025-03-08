@@ -111,6 +111,20 @@
 
           <div class="space-y-6">
             <div>
+              <h3 class="text-base font-medium mb-2">数据库位置</h3>
+              <div class="flex items-center space-x-2 mb-2">
+                <el-input v-model="databasePath" readonly placeholder="数据库文件路径" class="flex-1" />
+                <el-button @click="selectDatabasePath">
+                  <el-icon><Folder /></el-icon>
+                  选择位置
+                </el-button>
+              </div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                修改数据库位置后，应用程序将使用新位置存储数据。
+              </div>
+            </div>
+
+            <div>
               <h3 class="text-base font-medium mb-2">数据备份</h3>
               <div class="flex space-x-4">
                 <el-button type="primary" @click="backupData">
@@ -163,8 +177,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ref, onMounted } from 'vue'
+import { ElMessageBox, ElMessage } from 'element-plus'
 
 // 设置数据
 const settings = ref({
@@ -180,6 +194,9 @@ const settings = ref({
   debug: false,
 })
 
+// 数据库路径
+const databasePath = ref('')
+
 // 缓存大小
 const cacheSize = ref(1024 * 1024 * 100) // 100MB
 
@@ -192,6 +209,60 @@ const formatSize = (size: number) => {
     index++
   }
   return `${size.toFixed(2)} ${units[index]}`
+}
+
+// 获取当前数据库路径
+const getDatabasePath = async () => {
+  try {
+    const result = await window.electronAPI.invoke('get-database-path')
+    if (result.success) {
+      databasePath.value = result.path
+    } else {
+      ElMessage.error('获取数据库路径失败: ' + result.error)
+    }
+  } catch (error) {
+    console.error('获取数据库路径出错:', error)
+    ElMessage.error('获取数据库路径出错')
+  }
+}
+
+// 选择数据库路径
+const selectDatabasePath = async () => {
+  try {
+    // 调用 Electron 的选择目录对话框
+    const dirPath = await window.electronAPI.invoke('dialog:showOpenDirectoryDialog')
+    if (!dirPath) return // 用户取消了选择
+    
+    // 使用 invoke 调用主进程来构建正确的路径
+    const newDbPath = await window.electronAPI.invoke('build-database-path', dirPath)
+    
+    // 确认是否更改
+    try {
+      await ElMessageBox.confirm(
+        `确定要将数据库位置更改为:\n${newDbPath}\n\n更改后应用程序将使用新位置存储数据。`,
+        '更改数据库位置',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+        }
+      )
+      
+      // 设置新路径
+      const result = await window.electronAPI.invoke('set-database-path', newDbPath)
+      if (result.success) {
+        databasePath.value = result.path
+        ElMessage.success('数据库位置已更改')
+      } else {
+        ElMessage.error('设置数据库路径失败: ' + result.error)
+      }
+    } catch {
+      // 用户取消了确认
+    }
+  } catch (error) {
+    console.error('选择数据库路径出错:', error)
+    ElMessage.error('选择数据库路径出错')
+  }
 }
 
 // 选择目录
@@ -261,6 +332,11 @@ const resetSettings = async () => {
 const saveSettings = () => {
   // TODO: 实现设置保存
 }
+
+// 组件挂载时获取数据库路径
+onMounted(() => {
+  getDatabasePath()
+})
 </script>
 
 <style lang="postcss" scoped>

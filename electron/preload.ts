@@ -18,7 +18,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'open-browser', 
       'element:startPicker', 
       'extract:preview', 
-      'window:toggleFullscreen'
+      'window:toggleFullscreen',
+      'save-configuration',
+      'get-all-configurations',
+      'get-configuration',
+      'delete-configuration',
+      'get-database-path',
+      'set-database-path',
+      'build-database-path'
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

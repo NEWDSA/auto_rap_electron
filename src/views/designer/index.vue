@@ -689,6 +689,7 @@ const handleDrop = (event: DragEvent) => {
     properties: {
       name: node.name,
       nodeType: node.type,
+      parentId: undefined,
       // 浏览器节点的默认属性
       ...(node.type === 'browser' ? {
         actionType: 'goto',
@@ -852,13 +853,37 @@ const handleRedo = () => {
 }
 
 // 保存流程
-const handleSave = () => {
+const handleSave = async () => {
   if (!lf.value) return
-  const data = lf.value.getGraphData()
-  console.log('保存流程:', {
-    name: flowName.value,
-    data
-  })
+  
+  try {
+    // 获取流程数据
+    const data = lf.value.getGraphData()
+    
+    // 如果没有流程名称，提示用户输入
+    if (!flowName.value) {
+      const { value } = await ElMessageBox.prompt('请输入流程名称', '保存流程', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputValidator: (value) => !!value.trim(),
+        inputErrorMessage: '流程名称不能为空'
+      })
+      flowName.value = value
+    }
+    
+    // 保存到数据库
+    const result = await window.electronAPI.invoke('save-configuration', flowName.value, JSON.stringify(data))
+    
+    if (result && result.success) {
+      ElMessage.success('保存成功')
+    } else {
+      throw new Error(result?.error || '保存失败')
+    }
+  } catch (error: any) {
+    if (error.message !== 'cancel') {
+      ElMessage.error(`保存失败: ${error.message}`)
+    }
+  }
 }
 
 // 运行流程

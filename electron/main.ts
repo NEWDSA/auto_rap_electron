@@ -3,12 +3,39 @@ import path from 'path'
 import { spawn } from 'child_process'
 import { AutomationController } from './automation-controller'
 import fs from 'fs/promises'
+import DatabaseService from './database'
 
 // 是否是开发环境
 const isDev = process.env.NODE_ENV === 'development'
 
 // 自动化控制器实例
 const automationController = new AutomationController()
+
+// 数据库服务实例
+const dbService = DatabaseService.getInstance()
+
+// 打印用户数据目录路径
+console.log('用户数据目录路径:', app.getPath('userData'))
+
+// 测试数据库连接
+try {
+  console.log('开始测试数据库连接...')
+  // 获取所有配置
+  dbService.getAllConfigurations()
+    .then(configs => {
+      console.log('数据库连接正常，获取到配置数量:', configs.length)
+      // 尝试插入一条测试数据
+      return dbService.saveConfiguration('test_connection', JSON.stringify({test: true}))
+    })
+    .then(id => {
+      console.log('测试数据插入成功，ID:', id)
+    })
+    .catch(error => {
+      console.error('数据库操作失败:', error)
+    })
+} catch (error) {
+  console.error('测试数据库连接时出错:', error)
+}
 
 // 启动 Chrome
 function launchChrome() {
@@ -62,7 +89,7 @@ ipcMain.handle('flow:start', async (_, nodes) => {
   try {
     await automationController.start(nodes)
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     return { success: false, error: error.message }
   }
 })
@@ -71,7 +98,7 @@ ipcMain.handle('flow:stop', async () => {
   try {
     await automationController.stop()
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     return { success: false, error: error.message }
   }
 })
@@ -255,6 +282,117 @@ ipcMain.handle('window:toggleFullscreen', () => {
     return { success: true, isFullScreen: !isFullScreen }
   }
   return { success: false, error: '无法获取窗口' }
+})
+
+// 注册保存流程配置的处理程序
+ipcMain.handle('save-configuration', async (event, name, content) => {
+  console.log('收到保存请求:', name, '数据长度:', content ? content.length : 0)
+  try {
+    // 检查是否已存在同名配置
+    const configs = await dbService.getAllConfigurations()
+    console.log('获取到所有配置:', configs.length)
+    const existingConfig = configs.find(config => config.name === name)
+
+    if (existingConfig) {
+      console.log('更新现有配置:', existingConfig.id)
+      // 更新现有配置
+      await dbService.updateConfiguration(existingConfig.id, name, content)
+      console.log('更新成功')
+      return { success: true, id: existingConfig.id }
+    } else {
+      console.log('创建新配置')
+      // 创建新配置
+      const id = await dbService.saveConfiguration(name, content)
+      console.log('创建成功, ID:', id)
+      return { success: true, id }
+    }
+  } catch (error: any) {
+    console.error('保存流程配置失败:', error)
+    return { success: false, error: error.message || '未知错误' }
+  }
+})
+
+// 注册获取所有流程配置的处理程序
+ipcMain.handle('get-all-configurations', async () => {
+  try {
+    const configs = await dbService.getAllConfigurations()
+    return { success: true, data: configs }
+  } catch (error: any) {
+    console.error('获取流程配置失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 注册获取单个流程配置的处理程序
+ipcMain.handle('get-configuration', async (_, id) => {
+  try {
+    const config = await dbService.getConfigurationById(id)
+    return { success: true, data: config }
+  } catch (error: any) {
+    console.error('获取流程配置失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 注册删除流程配置的处理程序
+ipcMain.handle('delete-configuration', async (_, id) => {
+  try {
+    await dbService.deleteConfiguration(id)
+    return { success: true }
+  } catch (error: any) {
+    console.error('删除流程配置失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 注册获取数据库路径的处理程序
+ipcMain.handle('get-database-path', () => {
+  try {
+    const dbPath = DatabaseService.getDatabasePath()
+    return { success: true, path: dbPath }
+  } catch (error: any) {
+    console.error('获取数据库路径失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 注册设置数据库路径的处理程序
+ipcMain.handle('set-database-path', async (_, newPath) => {
+  try {
+    // 保存旧路径，以便迁移数据
+    const oldPath = DatabaseService.getDatabasePath()
+    
+    // 如果路径相同，不做任何操作
+    if (oldPath === newPath) {
+      return { success: true, path: newPath }
+    }
+    
+    // 设置新路径
+    DatabaseService.setDatabasePath(newPath)
+    
+    // 重新获取数据库服务实例（会使用新路径）
+    const newDbService = DatabaseService.getInstance()
+    
+    // 更新全局实例
+    Object.assign(dbService, newDbService)
+    
+    return { success: true, path: newPath }
+  } catch (error: any) {
+    console.error('设置数据库路径失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 注册构建数据库路径的处理程序
+ipcMain.handle('build-database-path', (_, dirPath) => {
+  try {
+    // 使用 path.join 确保路径格式在不同操作系统上都正确
+    const dbPath = path.join(dirPath, 'data.db')
+    return dbPath
+  } catch (error: any) {
+    console.error('构建数据库路径失败:', error)
+    return dirPath + '/data.db' // 回退到简单拼接
+  }
 })
 
 // 应用程序准备就绪时创建窗口
