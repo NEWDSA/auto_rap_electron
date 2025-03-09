@@ -111,6 +111,41 @@ const selectedTasks = ref<any[]>([])
 // 任务数据
 const tasks = ref<any[]>([])
 
+// 深度清理对象，确保可序列化
+const deepCleanObject = (obj: any): any => {
+  // 如果不是对象或为null，直接返回
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  
+  // 如果是数组，递归清理每个元素
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepCleanObject(item));
+  }
+  
+  // 如果是普通对象，递归清理每个属性
+  const cleanObj: Record<string, any> = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      // 跳过函数和特殊对象
+      const value = obj[key];
+      if (typeof value !== 'function' && 
+          !(value instanceof Element) && 
+          !(typeof value === 'symbol')) {
+        try {
+          // 尝试序列化和反序列化，确保可以克隆
+          JSON.parse(JSON.stringify(value));
+          cleanObj[key] = deepCleanObject(value);
+        } catch (e) {
+          // 如果无法序列化，跳过该属性
+          console.warn(`属性 ${key} 无法序列化，已跳过`);
+        }
+      }
+    }
+  }
+  return cleanObj;
+};
+
 // 从数据库加载任务
 const loadTasksFromDatabase = async () => {
   loading.value = true
@@ -193,7 +228,33 @@ const handleRefresh = () => {
 // 启动任务
 const startTask = async (task: any) => {
   try {
-    const result = await window.electronAPI.invoke('flow:start', task.content)
+    // 确保 task.content 包含 nodes 属性
+    if (!task.content || !task.content.nodes) {
+      ElMessage.error('任务数据格式不正确')
+      return
+    }
+    
+    // 深度克隆并清理节点数据，移除可能导致序列化问题的属性
+    const cleanNodes = task.content.nodes.map((node: any) => {
+      // 创建一个新对象，只包含必要的属性
+      const cleanNode = {
+        id: node.id,
+        type: node.type,
+        x: node.x,
+        y: node.y,
+        text: node.text,
+        // 深度清理 properties 对象
+        properties: deepCleanObject(node.properties || {})
+      };
+      
+      return cleanNode;
+    });
+    
+    // 确保可以序列化
+    const serializedNodes = JSON.parse(JSON.stringify(cleanNodes));
+    
+    // 传递清理后的节点数组
+    const result = await window.electronAPI.invoke('flow:start', serializedNodes);
     if (result.success) {
       // 更新任务状态
       task.status = 'running'
@@ -232,10 +293,58 @@ const handleBatchStart = async () => {
   }
   
   try {
+    let successCount = 0
+    let failCount = 0
+    
     for (const task of selectedTasks.value) {
-      await startTask(task)
+      try {
+        // 确保 task.content 包含 nodes 属性
+        if (!task.content || !task.content.nodes) {
+          failCount++
+          continue
+        }
+        
+        // 深度克隆并清理节点数据，移除可能导致序列化问题的属性
+        const cleanNodes = task.content.nodes.map((node: any) => {
+          // 创建一个新对象，只包含必要的属性
+          const cleanNode = {
+            id: node.id,
+            type: node.type,
+            x: node.x,
+            y: node.y,
+            text: node.text,
+            // 深度清理 properties 对象
+            properties: deepCleanObject(node.properties || {})
+          };
+          
+          return cleanNode;
+        });
+        
+        // 确保可以序列化
+        const serializedNodes = JSON.parse(JSON.stringify(cleanNodes));
+        
+        // 启动任务
+        const result = await window.electronAPI.invoke('flow:start', serializedNodes);
+        if (result.success) {
+          // 更新任务状态
+          task.status = 'running'
+          successCount++
+        } else {
+          failCount++
+        }
+      } catch (error) {
+        console.error('启动任务出错:', error)
+        failCount++
+      }
     }
-    ElMessage.success('批量启动任务成功')
+    
+    if (successCount > 0 && failCount === 0) {
+      ElMessage.success(`成功启动 ${successCount} 个任务`)
+    } else if (successCount > 0 && failCount > 0) {
+      ElMessage.warning(`成功启动 ${successCount} 个任务，${failCount} 个任务启动失败`)
+    } else {
+      ElMessage.error('所有任务启动失败')
+    }
   } catch (error) {
     console.error('批量启动任务出错:', error)
     ElMessage.error('批量启动任务出错')
