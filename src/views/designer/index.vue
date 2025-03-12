@@ -29,7 +29,12 @@
         </el-button-group>
 
         <el-divider direction="vertical" />
-
+        
+        <!-- 添加智能录制按钮 -->
+        <el-button type="primary" @click="showRecorder = true">
+          <el-icon><VideoCamera /></el-icon>
+          智能录制
+        </el-button>
       </div>
     </div>
 
@@ -139,6 +144,12 @@
       <span class="text-sm text-gray-500">{{ statusText }}</span>
     </div>
   </div>
+  
+  <!-- 智能录制组件 -->
+  <IntelligentRecorder 
+    v-model:visible="showRecorder" 
+    @generate-flow="handleGenerateFlow"
+  />
 </template>
 
 <script setup lang="ts">
@@ -170,7 +181,8 @@ import {
   Tools,
   Operation,
   RefreshLeft,
-  RefreshRight
+  RefreshRight,
+  VideoCamera
 } from '@element-plus/icons-vue'
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
@@ -194,6 +206,9 @@ import ExportConfig from '@/components/node-configs/ExportConfig.vue'
 // 类型定义
 import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
 
+// 导入智能录制组件
+import IntelligentRecorder from '@/components/recorder/IntelligentRecorder.vue'
+
 // 响应式状态
 const flowName = ref('')
 const activeCategories = ref(['basic', 'control'])
@@ -207,6 +222,7 @@ const toolsPanelCollapsed = ref(false)
 const propertiesPanelCollapsed = ref(false)
 const isRunning = ref(false)
 const statusText = ref('')
+const showRecorder = ref(false)
 
 // 流程执行器实例
 const flowExecutor = new FlowExecutor()
@@ -305,7 +321,7 @@ const registerEvents = () => {
 class CustomNodeModel extends RectNodeModel {
   initNodeData(data: any) {
     super.initNodeData(data);
-    this.width = 120;
+    this.width = 180;
     this.height = 40;
     this.radius = 4;
     
@@ -313,7 +329,8 @@ class CustomNodeModel extends RectNodeModel {
     if (typeof data.text === 'string') {
       this.text.value = data.text;
     } else if (data.properties?.name) {
-      this.text.value = data.properties.name;
+      const name = data.properties.name;
+      this.text.value = name.length > 25 ? name.substring(0, 25) + '...' : name;
     } else {
       this.text.value = '';
     }
@@ -326,6 +343,18 @@ class CustomNodeModel extends RectNodeModel {
       fill: '#fff',
       stroke: '#409eff',
       strokeWidth: 2
+    };
+  }
+
+  getTextStyle() {
+    const style = super.getTextStyle();
+    return {
+      ...style,
+      fontSize: 12,
+      lineHeight: 1.2,
+      overflowMode: 'autoWrap',
+      textAlign: 'center',
+      textBaseline: 'middle'
     };
   }
 }
@@ -532,11 +561,15 @@ const initLogicFlow = async () => {
       style: {
         rect: {
           radius: 5,
+          strokeWidth: 2,
         },
         nodeText: {
-          fontSize: 14,
+          fontSize: 12,
           color: '#333',
           overflowMode: 'autoWrap',
+          lineHeight: 1.2,
+          padding: 5,
+          maxWidth: 170, // 限制最大宽度
         },
         edgeText: {
           fontSize: 12,
@@ -952,6 +985,63 @@ onUnmounted(() => {
   }
 });
 
+// 处理流程生成
+const handleGenerateFlow = (nodes: any[]) => {
+  if (!lf.value) {
+    console.error('LogicFlow实例未初始化，无法生成流程');
+    ElMessage.error('设计器未准备好，请刷新页面重试');
+    return;
+  }
+  
+  try {
+    console.log('设计器收到节点数据，节点数:', nodes.length);
+    
+    // 清空当前画布 - 使用正确的API
+    if (typeof lf.value.clearData !== 'function') {
+      console.log('使用替代方法清空画布');
+      const graphData = lf.value.getGraphData();
+      // 删除所有节点
+      if (graphData.nodes) {
+        graphData.nodes.forEach((node: any) => {
+          lf.value?.deleteNode(node.id);
+        });
+      }
+    } else {
+      lf.value.clearData();
+    }
+    
+    // 添加所有节点
+    for (const node of nodes) {
+      console.log('添加节点:', node.type, node.id);
+      lf.value.addNode(node);
+    }
+    
+    // 创建连接线 - 按顺序连接所有节点
+    for (let i = 0; i < nodes.length - 1; i++) {
+      lf.value.addEdge({
+        type: 'bezier',
+        sourceNodeId: nodes[i].id,
+        targetNodeId: nodes[i + 1].id,
+        properties: {}
+      });
+    }
+    
+    // 自动适应视图 - 使用正确的API
+    if (typeof lf.value.fitView !== 'function') {
+      console.log('使用替代方法适应视图');
+      lf.value.resetTransform && lf.value.resetTransform();
+      lf.value.focusOn && lf.value.focusOn();
+    } else {
+      lf.value.fitView();
+    }
+    
+    ElMessage.success('智能录制流程已生成');
+  } catch (error) {
+    console.error('生成流程失败:', error);
+    ElMessage.error(`生成流程失败: ${(error as Error).message}`);
+  }
+}
+
 // 从数据库加载流程
 const loadFlowFromDatabase = async (id: number) => {
   if (!lf.value) return
@@ -969,11 +1059,27 @@ const loadFlowFromDatabase = async (id: number) => {
       // 解析流程数据
       const flowData = JSON.parse(result.data.content)
       
-      // 清空当前画布
-      lf.value.clearData()
+      // 清空当前画布 - 使用正确的API
+      if (typeof lf.value.clearData !== 'function') {
+        console.log('使用替代方法清空画布');
+        const graphData = lf.value.getGraphData();
+        // 删除所有节点
+        if (graphData.nodes) {
+          graphData.nodes.forEach((node: any) => {
+            lf.value?.deleteNode(node.id);
+          });
+        }
+      } else {
+        lf.value.clearData()
+      }
       
       // 加载流程数据
-      lf.value.render(flowData)
+      if (typeof lf.value.render === 'function') {
+        lf.value.render(flowData)
+      } else {
+        console.error('无法加载流程数据：LogicFlow实例缺少render方法');
+        throw new Error('无法加载流程数据');
+      }
       
       statusText.value = `已加载流程: ${flowName.value}`
       ElMessage.success('流程加载成功')

@@ -25,7 +25,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'delete-configuration',
       'get-database-path',
       'set-database-path',
-      'build-database-path'
+      'build-database-path',
+      // 录制相关通道
+      'recorder:start',
+      'recorder:stop',
+      'recorder:capture-action',
+      'test-ipc-channel',
+      // 自动化相关通道
+      'automation:export-data'
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
@@ -36,7 +43,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send(channel, data)
   },
   on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
-    ipcRenderer.on(channel, callback)
+    // 添加事件通道白名单检查
+    const validChannels = [
+      'recorder:action-captured',
+      'recorder:recording-completed',
+      'automation:export-data'
+    ]
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, callback)
+      return () => {
+        ipcRenderer.removeListener(channel, callback)
+      }
+    }
+    throw new Error(`不允许监听通道: ${channel}`)
   },
   once: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
     ipcRenderer.once(channel, callback)

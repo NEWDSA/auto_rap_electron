@@ -26,6 +26,7 @@
     "@element-plus/icons-vue": "^2.3.1",
     "@logicflow/core": "^1.2.23",
     "@logicflow/extension": "^1.2.23",
+    "@types/uuid": "^10.0.0",
     "@vueuse/core": "^10.7.1",
     "aws-sdk": "^2.1692.0",
     "docx": "^9.2.0",
@@ -40,6 +41,7 @@
     "pinia": "2.1.0",
     "playwright": "1.40.0",
     "sqlite3": "^5.1.7",
+    "uuid": "^11.1.0",
     "vue": "3.4.0",
     "vue-router": "4.2.0"
   },

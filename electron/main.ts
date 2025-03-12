@@ -4,6 +4,7 @@ import { spawn } from 'child_process'
 import { AutomationController } from './automation-controller'
 import fs from 'fs/promises'
 import DatabaseService from './database'
+import { RecorderService } from '../src/core/recorder/RecorderService'
 
 // 是否是开发环境
 const isDev = process.env.NODE_ENV === 'development'
@@ -13,6 +14,9 @@ const automationController = new AutomationController()
 
 // 数据库服务实例
 const dbService = DatabaseService.getInstance()
+
+// 录制服务实例
+let recorderService: RecorderService
 
 // 打印用户数据目录路径
 console.log('用户数据目录路径:', app.getPath('userData'))
@@ -72,6 +76,12 @@ function createWindow() {
     },
   })
 
+  // 初始化录制服务
+  recorderService = new RecorderService(mainWindow, {
+    takeScreenshots: isDev, // 在开发环境下开启截图
+    screenshotDir: path.join(app.getPath('userData'), 'screenshots'),
+  })
+
   // 加载页面
   if (isDev) {
     // 开发环境：加载本地服务
@@ -85,6 +95,35 @@ function createWindow() {
 }
 
 // 注册 IPC 处理程序
+ipcMain.handle('test-ipc-channel', async (_, data) => {
+  console.log('收到测试IPC通道请求:', data);
+  return { success: true, message: '测试IPC通道成功', data };
+});
+
+ipcMain.handle('recorder:start', async (_, url) => {
+  console.log('收到录制开始请求:', url);
+  try {
+    const result = await recorderService.startRecording(url);
+    console.log('录制开始结果:', result);
+    return result;
+  } catch (error) {
+    console.error('录制开始失败:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('recorder:stop', async () => {
+  console.log('收到录制停止请求');
+  try {
+    const result = await recorderService.stopRecording();
+    console.log('录制停止结果:', result);
+    return result;
+  } catch (error) {
+    console.error('录制停止失败:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 ipcMain.handle('flow:start', async (_, nodes) => {
   try {
     await automationController.start(nodes)
@@ -394,6 +433,20 @@ ipcMain.handle('build-database-path', (_, dirPath) => {
     return dirPath + '/data.db' // 回退到简单拼接
   }
 })
+
+ipcMain.handle('recorder:capture-action', async (_, action) => {
+  console.log('收到录制操作:', action);
+  try {
+    if (!recorderService) {
+      throw new Error('录制服务未初始化');
+    }
+    const result = await recorderService.captureAction(action);
+    return result;
+  } catch (error) {
+    console.error('捕获操作失败:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
 
 // 应用程序准备就绪时创建窗口
 app.whenReady().then(() => {
