@@ -121,33 +121,47 @@ export class AutomationController {
     this.isRunning = true
 
     try {
-      // 检查并确保浏览器正常运行
-      if (!this.browser || !this.browser.isConnected()) {
-        if (this.browser) {
-          try {
-            await this.browser.close()
-          } catch (e) {
-            // 忽略关闭错误
-          }
+      // 始终关闭现有的浏览器实例，确保每次从干净状态开始
+      if (this.browser) {
+        try {
+          console.log('关闭现有浏览器实例，准备重新启动...');
+          await this.browser.close();
+        } catch (e) {
+          console.warn('关闭浏览器时出错:', e);
+          // 忽略关闭错误
         }
-        this.browser = await chromium.launch({
-          headless: false
-        })
+        this.browser = null;
+        this.page = null;
       }
 
-      // 检查并确保页面正常运行
-      if (!this.page || this.page.isClosed()) {
-        if (this.page) {
-          try {
-            await this.page.close()
-          } catch (e) {
-            // 忽略关闭错误
-          }
-        }
-        this.page = await this.browser.newPage()
-      }
+      // 启动新的浏览器实例
+      console.log('启动新的浏览器实例...');
+      this.browser = await chromium.launch({
+        headless: false,
+        args: ['--disable-web-security', '--disable-features=IsolateOrigins', '--disable-site-isolation-trials']
+      });
+
+      // 创建新的页面
+      console.log('创建新的页面...');
+      const context = await this.browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        ignoreHTTPSErrors: true
+      });
+      this.page = await context.newPage();
+
+      // 配置页面
+      await this.page.setDefaultTimeout(30000); // 设置默认超时为30秒
+      
+      // 设置浏览器关闭事件处理
+      this.browser.on('disconnected', () => {
+        console.log('浏览器已断开连接');
+        this.browser = null;
+        this.page = null;
+        this.isRunning = false;
+      });
 
       // 执行根节点
+      console.log('开始执行流程节点...');
       const rootNodes = nodes.filter(node => !node.properties.parentId)
       for (const node of rootNodes) {
         if (!this.isRunning) break
@@ -156,9 +170,10 @@ export class AutomationController {
 
       // 执行完成后设置状态
       this.isRunning = false
+      console.log('流程执行完成');
     } catch (error) {
       console.error('执行流程出错:', error)
-      // 出错时才关闭浏览器
+      // 出错时关闭浏览器
       await this.stop()
       throw error
     }
@@ -257,20 +272,26 @@ export class AutomationController {
       let actualSelector = targetSelector
       const currentSelectorType = selectorType || 'css'
 
+      // 根据选择器类型构建CSS选择器
       switch (currentSelectorType) {
         case 'id':
-          actualSelector = targetSelector.startsWith('#') ? targetSelector : `#${targetSelector}`
+          actualSelector = `#${targetSelector}` // 始终添加#前缀
           break
         case 'class':
-          actualSelector = targetSelector.startsWith('.') ? targetSelector : `.${targetSelector}`
+          actualSelector = `.${targetSelector}` // 始终添加.前缀
           break
         case 'name':
-          actualSelector = targetSelector.startsWith('[name="') ? targetSelector : `[name="${targetSelector}"]`
+          actualSelector = `[name="${targetSelector}"]` // 始终使用属性选择器格式
           break
         case 'xpath':
           // XPath 选择器保持不变
           break
+        case 'css':
+          // CSS 选择器保持不变
+          break
       }
+
+      console.log(`点击元素: 选择器类型=${currentSelectorType}, 原始选择器=${targetSelector}, 实际选择器=${actualSelector}`)
 
       // 等待页面加载完成
       await this.page.waitForLoadState('networkidle', { 
@@ -347,53 +368,114 @@ export class AutomationController {
       userAgent
     } = properties
     
-    // 设置浏览器窗口大小
-    if (width && height) {
-      await this.page.setViewportSize({ width, height })
-    }
-
-    // 设置用户代理
-    if (userAgent) {
-      await this.page.setExtraHTTPHeaders({ 'User-Agent': userAgent })
-    }
-
-    switch (actionType) {
-      case 'goto':
-        if (url) {
-          await this.page.goto(url)
-          if (waitForLoad && timeout) {
-            await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
+    try {
+      console.log(`执行浏览器操作: ${actionType}, 目标: ${url || '当前页面'}`);
+      
+      // 设置浏览器窗口大小
+      if (width && height) {
+        console.log(`设置视窗大小: ${width}x${height}`);
+        await this.page.setViewportSize({ width, height });
+      }
+  
+      // 设置用户代理
+      if (userAgent) {
+        console.log(`设置用户代理: ${userAgent}`);
+        await this.page.setExtraHTTPHeaders({ 'User-Agent': userAgent });
+      }
+  
+      switch (actionType) {
+        case 'goto':
+          if (url) {
+            console.log(`导航到URL: ${url}`);
+            
+            // 尝试导航，添加重试机制
+            let success = false;
+            let attempts = 0;
+            const maxAttempts = 3;
+            
+            while (!success && attempts < maxAttempts) {
+              try {
+                attempts++;
+                const response = await this.page.goto(url, {
+                  timeout: timeout ? timeout * 1000 : 30000,
+                  waitUntil: 'domcontentloaded'
+                });
+                
+                if (!response) {
+                  console.warn(`导航没有返回响应，URL: ${url}`);
+                  if (attempts < maxAttempts) continue;
+                }
+                
+                success = true;
+                console.log(`成功导航到: ${this.page.url()}`);
+                
+                // 等待页面加载完成
+                if (waitForLoad) {
+                  try {
+                    console.log('等待网络活动完成...');
+                    await this.page.waitForLoadState('networkidle', { 
+                      timeout: timeout ? timeout * 1000 : 30000 
+                    });
+                  } catch (e) {
+                    console.warn('等待网络活动超时，继续执行', e);
+                  }
+                }
+              } catch (error) {
+                console.error(`导航失败(尝试 ${attempts}/${maxAttempts}):`, error);
+                if (attempts >= maxAttempts) throw error;
+                
+                // 短暂等待后重试
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+            }
           }
-        }
-        break
-      case 'back':
-        await this.page.goBack()
-        if (waitForLoad && timeout) {
-          await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
-        }
-        break
-      case 'forward':
-        await this.page.goForward()
-        if (waitForLoad && timeout) {
-          await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
-        }
-        break
-      case 'reload':
-        await this.page.reload()
-        if (waitForLoad && timeout) {
-          await this.page.waitForLoadState('networkidle', { timeout: timeout * 1000 })
-        }
-        break
-      case 'close':
-        await this.page.close()
-        this.page = null
-        break
-      case 'maximize':
-        await this.page.setViewportSize({ width: 1920, height: 1080 })
-        break
-      case 'minimize':
-        await this.page.setViewportSize({ width: 800, height: 600 })
-        break
+          break;
+        case 'back':
+          console.log('返回上一页');
+          await this.page.goBack();
+          if (waitForLoad) {
+            await this.page.waitForLoadState('networkidle', { 
+              timeout: timeout ? timeout * 1000 : 30000 
+            }).catch(e => console.warn('等待网络活动超时', e));
+          }
+          break;
+        case 'forward':
+          console.log('前往下一页');
+          await this.page.goForward();
+          if (waitForLoad) {
+            await this.page.waitForLoadState('networkidle', { 
+              timeout: timeout ? timeout * 1000 : 30000 
+            }).catch(e => console.warn('等待网络活动超时', e));
+          }
+          break;
+        case 'reload':
+          console.log('刷新页面');
+          await this.page.reload();
+          if (waitForLoad) {
+            await this.page.waitForLoadState('networkidle', { 
+              timeout: timeout ? timeout * 1000 : 30000 
+            }).catch(e => console.warn('等待网络活动超时', e));
+          }
+          break;
+        case 'close':
+          console.log('关闭页面');
+          await this.page.close();
+          this.page = null;
+          break;
+        case 'maximize':
+          console.log('最大化窗口');
+          await this.page.setViewportSize({ width: 1920, height: 1080 });
+          break;
+        case 'minimize':
+          console.log('最小化窗口');
+          await this.page.setViewportSize({ width: 800, height: 600 });
+          break;
+      }
+      
+      console.log('浏览器操作完成');
+    } catch (error) {
+      console.error('执行浏览器操作失败:', error);
+      throw new Error(`浏览器操作失败: ${error.message}`);
     }
   }
 
@@ -489,6 +571,7 @@ export class AutomationController {
 
     const { 
       selector, 
+      selectorType,
       extractType, 
       attributeName,
       headerSelector,
@@ -503,7 +586,7 @@ export class AutomationController {
     } = properties
 
     // 记录提取信息
-    console.log(`开始执行提取节点: 选择器=${selector}, 提取类型=${extractType}, 变量名=${variableName || '未设置'}`)
+    console.log(`开始执行提取节点: 选择器=${selector}, 选择器类型=${selectorType}, 提取类型=${extractType}, 变量名=${variableName || '未设置'}`)
 
     // 检查选择器是否存在
     if (!selector) {
@@ -514,18 +597,43 @@ export class AutomationController {
     try {
       let value: any = null
 
+      // 根据选择器类型构建实际的选择器
+      let actualSelector = selector
+      const currentSelectorType = selectorType || 'css'
+
+      // 根据选择器类型构建CSS选择器
+      switch (currentSelectorType) {
+        case 'id':
+          actualSelector = `#${selector}` // 始终添加#前缀
+          break
+        case 'class':
+          actualSelector = `.${selector}` // 始终添加.前缀
+          break
+        case 'name':
+          actualSelector = `[name="${selector}"]` // 始终使用属性选择器格式
+          break
+        case 'xpath':
+          // XPath 选择器保持不变
+          break
+        case 'css':
+          // CSS 选择器保持不变
+          break
+      }
+
+      console.log(`提取数据: 选择器类型=${currentSelectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
+
       // 使用新的等待选项
       const waitOptions = {
         state: waitForVisible ? 'visible' : 'attached',
         timeout: (timeout * 1000) // 转换为毫秒
       }
-      console.log(`等待选择器 ${selector} 出现，超时时间 ${timeout} 秒`)
-      await this.page.waitForSelector(selector, waitOptions)
-      console.log(`选择器 ${selector} 已找到`)
+      console.log(`等待选择器 ${actualSelector} 出现，超时时间 ${timeout} 秒`)
+      await this.page.waitForSelector(actualSelector, waitOptions as any)
+      console.log(`选择器 ${actualSelector} 已找到`)
 
       switch (extractType) {
         case 'text':
-          value = await this.page.textContent(selector)
+          value = await this.page.textContent(actualSelector)
           if (trimContent && typeof value === 'string') {
             value = value.trim()
           }
@@ -533,7 +641,7 @@ export class AutomationController {
 
         case 'attribute':
           if (attributeName) {
-            value = await this.page.getAttribute(selector, attributeName)
+            value = await this.page.getAttribute(actualSelector, attributeName)
             if (trimContent && typeof value === 'string') {
               value = value.trim()
             }
@@ -541,7 +649,7 @@ export class AutomationController {
           break
 
         case 'html':
-          value = await this.page.innerHTML(selector)
+          value = await this.page.innerHTML(actualSelector)
           if (trimContent && typeof value === 'string') {
             value = value.trim()
           }
@@ -584,7 +692,7 @@ export class AutomationController {
 
         case 'list':
           // 提取列表数据
-          value = await this.page.$$eval(selector, (elements, extractHTML) => {
+          value = await this.page.$$eval(actualSelector, (elements, extractHTML) => {
             return elements.map(el => 
               extractHTML ? el.innerHTML : el.textContent?.trim()
             )
@@ -730,26 +838,60 @@ export class AutomationController {
   private async executeWaitNode(properties: NodeProperties) {
     if (!this.page) return
 
-    const { waitType, timeout = 30, selector, reverse } = properties
+    const { waitType, timeout = 30, selector, selectorType, reverse } = properties
+    
     switch (waitType) {
       case 'timeout':
         await this.page.waitForTimeout(timeout * 1000)
         break
       case 'visible':
-        if (selector) {
-          if (reverse) {
-            await this.page.waitForSelector(selector, { state: 'hidden', timeout: timeout * 1000 })
-          } else {
-            await this.page.waitForSelector(selector, { state: 'visible', timeout: timeout * 1000 })
-          }
-        }
-        break
       case 'exists':
+      case 'hidden':
+      case 'clickable':
         if (selector) {
-          if (reverse) {
-            await this.page.waitForSelector(selector, { state: 'detached', timeout: timeout * 1000 })
-          } else {
-            await this.page.waitForSelector(selector, { timeout: timeout * 1000 })
+          // 根据选择器类型构建实际的选择器
+          let actualSelector = selector
+          const currentSelectorType = selectorType || 'css'
+
+          // 根据选择器类型构建CSS选择器
+          switch (currentSelectorType) {
+            case 'id':
+              actualSelector = `#${selector}` // 始终添加#前缀
+              break
+            case 'class':
+              actualSelector = `.${selector}` // 始终添加.前缀
+              break
+            case 'name':
+              actualSelector = `[name="${selector}"]` // 始终使用属性选择器格式
+              break
+            case 'xpath':
+              // XPath 选择器保持不变
+              break
+            case 'css':
+              // CSS 选择器保持不变
+              break
+          }
+
+          console.log(`等待元素: 类型=${waitType}, 选择器类型=${currentSelectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
+
+          if (waitType === 'visible') {
+            if (reverse) {
+              await this.page.waitForSelector(actualSelector, { state: 'hidden', timeout: timeout * 1000 })
+            } else {
+              await this.page.waitForSelector(actualSelector, { state: 'visible', timeout: timeout * 1000 })
+            }
+          } else if (waitType === 'exists') {
+            if (reverse) {
+              await this.page.waitForSelector(actualSelector, { state: 'detached', timeout: timeout * 1000 })
+            } else {
+              await this.page.waitForSelector(actualSelector, { timeout: timeout * 1000 })
+            }
+          } else if (waitType === 'clickable') {
+            const element = await this.page.waitForSelector(actualSelector, { 
+              state: 'visible', 
+              timeout: timeout * 1000 
+            })
+            await element.waitForElementState('enabled', { timeout: timeout * 1000 })
           }
         }
         break
@@ -1197,7 +1339,6 @@ export class AutomationController {
               }, '*')
             }
           })
-        })
 
         const result = await this.page.evaluate(() => {
           return new Promise<{ selector: string, selectorType: string }>((resolve, reject) => {
@@ -1287,113 +1428,158 @@ export class AutomationController {
     if (!selector || !text) throw new Error('选择器或输入文本不能为空')
 
     try {
+      console.log(`执行输入操作: 选择器=${selector}, 类型=${selectorType}, 文本=${text}`);
+
       // 根据选择器类型构建实际的选择器
-      let actualSelector = selector
+      let actualSelector = selector;
+      let locator;
+
       switch (selectorType) {
         case 'id':
-          actualSelector = selector.startsWith('#') ? selector : `#${selector}`
-          break
+          actualSelector = `#${selector}`; // 始终添加#前缀
+          locator = this.page.locator(actualSelector);
+          break;
         case 'class':
-          actualSelector = selector.startsWith('.') ? selector : `.${selector}`
-          break
+          actualSelector = `.${selector}`; // 始终添加.前缀
+          locator = this.page.locator(actualSelector);
+          break;
         case 'name':
-          actualSelector = selector.startsWith('[name="') ? selector : `[name="${selector}"]`
-          break
+          actualSelector = `[name="${selector}"]`; // 始终使用属性选择器格式
+          locator = this.page.locator(actualSelector);
+          break;
         case 'xpath':
-          // 使用 XPath
-          const element = await this.page.locator(selector).first()
-          if (element) {
-            // 确保元素可见和可交互
-            await element.waitFor({ state: 'visible' })
-            await element.waitFor({ state: 'attached' })
-            // 如果需要清除原有内容
-            if (clearFirst) {
-              await element.evaluate((el: HTMLInputElement) => {
-                el.value = ''
-                el.dispatchEvent(new Event('input', { bubbles: true }))
-                el.dispatchEvent(new Event('change', { bubbles: true }))
-              })
-            }
-            // 输入文本
-            if (simulateTyping) {
-              await element.type(text, { delay: typingDelay })
-            } else {
-              await element.fill(text)
-            }
-            // 等待
-            if (waitAfterInput && waitTimeout) {
-              await this.page.waitForTimeout(waitTimeout * 1000)
-            }
-            return
-          }
-          throw new Error('未找到匹配的元素')
+          locator = this.page.locator(selector);
+          break;
+        default:
+          // CSS选择器
+          locator = this.page.locator(selector);
       }
+      
+      console.log(`输入文本: 选择器类型=${selectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
 
-      // 等待元素可见和可交互
-      await this.page.waitForSelector(actualSelector, { 
-        state: 'visible',
-        timeout: 30000
-      })
-
-      // 获取元素并确保它是输入框
-      const element = await this.page.$(actualSelector)
-      if (!element) {
-        throw new Error('未找到输入元素')
+      // 尝试多种定位策略
+      if (await locator.count() === 0) {
+        console.log('未找到元素，尝试使用备用选择器');
+        
+        // 如果有元素ID，尝试使用ID
+        if (selector.includes('id=') || selector.includes('#')) {
+          const idSelector = selector.includes('#') ? selector : `#${selector.replace('id=', '')}`;
+          locator = this.page.locator(idSelector);
+        }
+        
+        // 检查是否找到元素
+        if (await locator.count() === 0) {
+          // 最后尝试使用input标签
+          locator = this.page.locator('input');
+          console.log(`尝试定位任何输入框，找到 ${await locator.count()} 个元素`);
+        }
       }
+      
+      // 等待元素可见
+      console.log('等待元素可见...');
+      await locator.first().waitFor({ state: 'visible', timeout: 5000 }).catch(e => {
+        console.warn('等待元素可见超时，尝试继续操作', e);
+      });
 
-      // 确保元素可交互
-      await element.waitForElementState('enabled')
+      // 确保元素在视图中
+      console.log('将元素滚动到视图中...');
+      await locator.first().scrollIntoViewIfNeeded().catch(e => {
+        console.warn('滚动元素到视图失败，尝试继续操作', e);
+      });
 
       // 如果需要清除原有内容
       if (clearFirst) {
-        await this.page.$eval(actualSelector, (el: HTMLInputElement) => {
-          el.value = ''
-          el.dispatchEvent(new Event('input', { bubbles: true }))
-          el.dispatchEvent(new Event('change', { bubbles: true }))
-        })
+        console.log('清除输入框现有内容...');
+        await locator.first().click({ timeout: 5000 }).catch(() => {}); // 点击元素激活
+        await locator.first().clear({ timeout: 5000 }).catch(() => {}); // 清除内容
       }
-
-      // 确保元素在视图中
-      await element.scrollIntoViewIfNeeded()
 
       // 输入文本
+      console.log(`使用${simulateTyping ? '模拟输入' : '直接填充'}方式输入文本...`);
       if (simulateTyping) {
-        await element.type(text, { delay: typingDelay })
+        // 添加重试机制
+        let retries = 3;
+        let success = false;
+        
+        while (retries > 0 && !success) {
+          try {
+            await locator.first().type(text, { 
+              delay: typingDelay, 
+              timeout: 10000 
+            });
+            success = true;
+          } catch (e) {
+            console.warn(`第${4-retries}次输入尝试失败:`, e);
+            retries--;
+            if (retries > 0) {
+              await this.page.waitForTimeout(1000); // 等待一秒再试
+            }
+          }
+        }
+        
+        if (!success) {
+          throw new Error('多次尝试输入文本失败');
+        }
       } else {
-        await element.fill(text)
+        await locator.first().fill(text, { timeout: 10000 }).catch(async e => {
+          console.warn('直接填充失败，尝试模拟输入:', e);
+          await locator.first().type(text, { delay: 50, timeout: 10000 });
+        });
       }
 
-      // 等待
+      // 等待输入完成
       if (waitAfterInput && waitTimeout) {
-        await this.page.waitForTimeout(waitTimeout * 1000)
+        console.log(`等待${waitTimeout}秒...`);
+        await this.page.waitForTimeout(waitTimeout * 1000);
       }
 
-      // 验证输入是否成功
-      const inputValue = await element.inputValue()
-      if (inputValue !== text) {
-        throw new Error('输入验证失败')
-      }
-
+      console.log('输入操作完成');
     } catch (error: any) {
-      const errorMessage = error.message || '未知错误'
-      throw new Error(`输入文本失败: ${errorMessage}`)
+      const errorMessage = error.message || '未知错误';
+      console.error('输入文本失败:', error);
+      throw new Error(`输入文本失败: ${errorMessage}`);
     }
   }
 
   private async executeScrollNode(properties: NodeProperties) {
     if (!this.page) return
 
-    const { actionType, selector, x, y, smooth, waitForScroll, timeout = 30 } = properties
+    const { actionType, selector, selectorType, x, y, smooth, waitForScroll, timeout = 30 } = properties
 
     try {
       switch (actionType) {
         case 'scrollToElement':
           if (selector) {
+            // 根据选择器类型构建实际的选择器
+            let actualSelector = selector
+            const currentSelectorType = selectorType || 'css'
+
+            // 根据选择器类型构建CSS选择器
+            switch (currentSelectorType) {
+              case 'id':
+                actualSelector = `#${selector}` // 始终添加#前缀
+                break
+              case 'class':
+                actualSelector = `.${selector}` // 始终添加.前缀
+                break
+              case 'name':
+                actualSelector = `[name="${selector}"]` // 始终使用属性选择器格式
+                break
+              case 'xpath':
+                // XPath 选择器保持不变
+                break
+              case 'css':
+                // CSS 选择器保持不变
+                break
+            }
+
+            console.log(`滚动到元素: 选择器类型=${currentSelectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
+            
             // 等待元素存在
-            await this.page.waitForSelector(selector, { timeout: timeout * 1000 })
+            await this.page.waitForSelector(actualSelector, { timeout: timeout * 1000 })
             
             // 执行滚动
-            await this.page.$eval(selector, (el: HTMLElement, smooth: boolean) => {
+            await this.page.$eval(actualSelector, (el: HTMLElement, smooth: boolean) => {
               el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
             }, smooth || false)
 

@@ -345,26 +345,44 @@ const handleCancel = async () => {
 // 生成流程
 const generateFlow = () => {
   try {
-    console.log('生成流程，操作数:', capturedActions.value.length)
+    console.log('开始生成流程，已捕获操作数:', capturedActions.value.length)
+    
+    if (capturedActions.value.length === 0) {
+      ElMessage.warning('没有捕获到任何操作，无法生成流程')
+      return
+    }
     
     // 创建临时recorder实例来处理已捕获的操作
     const tempRecorder = new IntelligentRecorder(options)
     
     // 设置必要的信息
-    tempRecorder.setBrowserInfo({
+    const browserInfo = {
       url: targetUrl.value,
-      title: document.title,
+      title: document.title || '未知页面',
       userAgent: navigator.userAgent
-    })
+    }
+    console.log('设置浏览器信息:', browserInfo)
+    tempRecorder.setBrowserInfo(browserInfo)
+    
+    // 按时间戳排序操作
+    const sortedActions = [...capturedActions.value].sort((a, b) => a.timestamp - b.timestamp)
     
     // 添加所有操作
-    capturedActions.value.forEach(action => {
+    console.log('添加已排序的操作到临时录制器')
+    sortedActions.forEach((action, index) => {
+      console.log(`添加操作 #${index + 1}: ${action.type}`)
       tempRecorder.addCapturedAction(action)
     })
     
     // 生成流程节点
+    console.log('开始生成流程节点...')
     const nodes = tempRecorder.actionsToFlowNodes()
-    console.log('生成的节点数:', nodes.length)
+    console.log('成功生成节点数:', nodes.length, '节点类型:', nodes.map(n => n.type).join(', '))
+    
+    if (nodes.length <= 2) { // 只有开始和结束节点
+      ElMessage.warning('生成的流程只包含开始和结束节点，请检查录制操作是否有效')
+      return
+    }
     
     // 直接发送生成的节点到父组件
     console.log('发送节点到设计器组件')
@@ -374,7 +392,7 @@ const generateFlow = () => {
     dialogVisible.value = false
     emit('update:visible', false)
     
-    ElMessage.success('流程已生成')
+    ElMessage.success(`流程已成功生成，包含 ${nodes.length} 个节点`)
   } catch (error) {
     console.error('生成流程失败:', error)
     ElMessage.error(`生成流程失败: ${(error as Error).message || '未知错误'}`)

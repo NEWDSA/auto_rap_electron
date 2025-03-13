@@ -129,6 +129,8 @@ export class IntelligentRecorder {
     let xPosition = 200;
     let yPosition = 200;
     
+    console.log(`生成流程节点, 共${this.actions.length}个操作`);
+    
     // 添加开始节点
     const startNode: FlowNode = {
       id: uuidv4(),
@@ -154,6 +156,7 @@ export class IntelligentRecorder {
       properties: {
         name: '打开浏览器',
         nodeType: 'browser',
+        actionType: 'goto',
         browserActionType: 'goto',
         url: this.browserInfo.url,
         waitForLoad: true,
@@ -169,9 +172,14 @@ export class IntelligentRecorder {
     // 上一个节点的ID (用于连接)
     let lastNodeId = browserNode.id;
     
+    // 按时间戳排序操作
+    const sortedActions = [...this.actions].sort((a, b) => a.timestamp - b.timestamp);
+    console.log('排序后的操作:', sortedActions.map(a => a.type));
+    
     // 添加动作节点
-    for (const action of this.actions) {
+    for (const action of sortedActions) {
       yPosition += 100;
+      console.log(`处理操作: ${action.type}, 时间戳: ${action.timestamp}`);
       
       let node: FlowNode | null = null;
       
@@ -197,6 +205,7 @@ export class IntelligentRecorder {
       }
       
       if (node) {
+        console.log(`创建节点: 类型=${node.type}, ID=${node.id}`);
         nodes.push(node);
         lastNodeId = node.id;
       }
@@ -231,19 +240,21 @@ export class IntelligentRecorder {
     // 根据配置和目标元素情况选择最佳选择器
     if (this.options.elementSelectorPreference === 'css' || this.options.elementSelectorPreference === 'mixed') {
       if (target.attributes?.id) {
-        return { selector: `#${target.attributes.id}`, selectorType: 'id' };
+        // 返回纯ID值，不添加#前缀
+        return { selector: target.attributes.id, selectorType: 'id' };
       }
       
       if (target.attributes?.class) {
-        // 简化class选择器，只取第一个类名
+        // 简化class选择器，只取第一个类名，不添加.前缀
         const firstClass = target.attributes.class.split(' ')[0];
         if (firstClass) {
-          return { selector: `.${firstClass}`, selectorType: 'class' };
+          return { selector: firstClass, selectorType: 'class' };
         }
       }
       
       if (target.attributes?.name) {
-        return { selector: `[name="${target.attributes.name}"]`, selectorType: 'name' };
+        // 返回纯name值，不使用[name="值"]格式
+        return { selector: target.attributes.name, selectorType: 'name' };
       }
     }
     
@@ -291,10 +302,12 @@ export class IntelligentRecorder {
       properties: {
         name: elementText ? `点击 ${elementText}` : '点击元素',
         nodeType: 'click',
+        actionType: 'click',
+        mouseActionType: 'moveToElement',
         selector,
         selectorType,
-        waitAfterClick: true,
-        clickTimeout: 1000
+        waitAfterClick: false,
+        clickTimeout: 10000
       }
     };
   }
@@ -318,14 +331,16 @@ export class IntelligentRecorder {
       properties: {
         name: `输入 ${displayText}`,
         nodeType: 'input',
+        actionType: 'type',
+        keyboardActionType: 'type',
         selector,
         selectorType,
         text: inputText,  // 保留完整输入文本作为属性
         clearFirst: true,
         simulateTyping: true,
         typingDelay: 50,
-        waitAfterInput: true,
-        waitTimeout: 1000
+        waitAfterInput: false,
+        waitTimeout: 10000
       }
     };
   }
@@ -356,8 +371,9 @@ export class IntelligentRecorder {
       properties: {
         name: `导航至 ${displayUrl}`,
         nodeType: 'browser',
+        actionType: 'goto',
         browserActionType: 'goto',
-        url, // 保留完整URL作为属性
+        url,
         waitForLoad: true,
         timeout: 30
       }
@@ -380,6 +396,7 @@ export class IntelligentRecorder {
       properties: {
         name: '滚动页面',
         nodeType: 'scroll',
+        actionType: 'scrollToPosition',
         mouseActionType: 'scrollToPosition',
         x: scrollX,
         y: scrollY,
@@ -405,6 +422,7 @@ export class IntelligentRecorder {
       properties: {
         name: `键盘操作 ${modifiers.length > 0 ? modifiers.join('+') + '+' : ''}${key}`,
         nodeType: 'keyboard',
+        actionType: modifiers.length > 0 ? 'combination' : 'press',
         keyboardActionType: modifiers.length > 0 ? 'combination' : 'press',
         key,
         modifiers
@@ -427,6 +445,8 @@ export class IntelligentRecorder {
       properties: {
         name: '提取数据',
         nodeType: 'extract',
+        actionType: 'extract',
+        extractActionType: 'text',
         selector,
         selectorType,
         extractType: 'text',
