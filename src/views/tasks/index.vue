@@ -25,6 +25,10 @@
           <el-icon><VideoPause /></el-icon>
           批量停止
         </el-button>
+        <el-button type="danger" @click="handleBatchDelete">
+          <el-icon><Delete /></el-icon>
+          批量删除
+        </el-button>
       </el-button-group>
     </div>
 
@@ -369,6 +373,58 @@ const handleBatchStop = async () => {
     console.error('批量停止任务出错:', error)
     ElMessage.error('批量停止任务出错')
   }
+}
+
+// 批量删除
+const handleBatchDelete = () => {
+  if (!selectedTasks.value.length) {
+    ElMessage.warning('请选择要删除的任务')
+    return
+  }
+  
+  ElMessageBox.confirm(
+    `确定要删除选中的 ${selectedTasks.value.length} 个任务吗？`,
+    '批量删除警告',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(async () => {
+    try {
+      let successCount = 0
+      let failCount = 0
+      
+      for (const task of selectedTasks.value) {
+        try {
+          const result = await window.electronAPI.invoke('delete-configuration', task.id)
+          if (result.success) {
+            successCount++
+          } else {
+            failCount++
+          }
+        } catch (error) {
+          console.error('删除任务出错:', error)
+          failCount++
+        }
+      }
+      
+      // 从列表中移除已删除的任务
+      tasks.value = tasks.value.filter(t => !selectedTasks.value.find(s => s.id === t.id))
+      total.value = tasks.value.length
+      
+      if (successCount > 0 && failCount === 0) {
+        ElMessage.success(`成功删除 ${successCount} 个任务`)
+      } else if (successCount > 0 && failCount > 0) {
+        ElMessage.warning(`成功删除 ${successCount} 个任务，${failCount} 个任务删除失败`)
+      } else {
+        ElMessage.error('所有任务删除失败')
+      }
+    } catch (error) {
+      console.error('批量删除任务出错:', error)
+      ElMessage.error('批量删除任务出错')
+    }
+  }).catch(() => {})
 }
 
 // 单个任务操作
