@@ -401,7 +401,8 @@ export class IntelligentRecorder {
         x: scrollX,
         y: scrollY,
         smooth: true,
-        waitForScroll: true
+        waitForScroll: true,
+        timeout: 30
       }
     };
   }

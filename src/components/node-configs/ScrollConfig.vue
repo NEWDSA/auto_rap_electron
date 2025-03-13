@@ -113,6 +113,11 @@ const emit = defineEmits<{
   (e: 'update', key: string): void
 }>()
 
+// 确保timeout有默认值
+// if (props.node.properties.waitForScroll && props.node.properties.timeout === undefined) {
+//   props.node.properties.timeout = 30
+// }
+props.node.properties.timeout = 30
 const isSelecting = ref(false)
 
 const handleChange = (key: string) => {
@@ -131,7 +136,7 @@ const openBrowserForSelect = async () => {
       handleChange('selector')
       ElMessage.success('元素选择成功')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('选择元素失败:', error)
     ElMessage.error(error.message || '选择元素失败')
   } finally {
