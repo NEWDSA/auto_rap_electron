@@ -773,18 +773,73 @@ const handleDrop = (event: DragEvent) => {
     const targetNode = nodes.find(n => n.id === edge.targetNodeId)
     if (!sourceNode || !targetNode) continue
 
-    const distance = pointToLineDistance(
-      offsetX,
-      offsetY,
-      sourceNode.x,
-      sourceNode.y,
-      targetNode.x,
-      targetNode.y
-    )
+    // 改进判断点是否在贝塞尔曲线上的方法
+    // 贝塞尔曲线是根据起点、终点和控制点生成的
+    // 为了简化判断，我们使用矩形区域检测而不是精确的曲线检测
+    if (edge.type === 'bezier' && edge.pointsList) {
+      // 贝塞尔曲线有点列表，计算包围盒
+      const points = edge.pointsList
+      if (points && points.length > 0) {
+        // 获取所有点的最小和最大坐标来创建包围盒
+        let minX = Infinity, minY = Infinity
+        let maxX = -Infinity, maxY = -Infinity
+        
+        for (const point of points) {
+          minX = Math.min(minX, point.x)
+          minY = Math.min(minY, point.y)
+          maxX = Math.max(maxX, point.x)
+          maxY = Math.max(maxY, point.y)
+        }
 
-    if (distance < 20) {
-      targetEdge = edge
-      break
+        // 扩大包围盒以增加点击区域
+        const padding = 15
+        minX -= padding
+        minY -= padding
+        maxX += padding
+        maxY += padding
+
+        // 检查点是否在包围盒内
+        if (offsetX >= minX && offsetX <= maxX && offsetY >= minY && offsetY <= maxY) {
+          // 找到最近的点
+          let minDistance = Infinity
+          for (let i = 0; i < points.length - 1; i++) {
+            const p1 = points[i]
+            const p2 = points[i + 1]
+            const distance = pointToLineDistance(
+              offsetX,
+              offsetY,
+              p1.x,
+              p1.y,
+              p2.x,
+              p2.y
+            )
+            if (distance < minDistance) {
+              minDistance = distance
+            }
+          }
+          
+          // 如果到最近线段的距离小于阈值，认为是点击在线上
+          if (minDistance < 20) {
+            targetEdge = edge
+            break
+          }
+        }
+      }
+    } else {
+      // 对于普通直线，使用原来的距离计算方法
+      const distance = pointToLineDistance(
+        offsetX,
+        offsetY,
+        sourceNode.x,
+        sourceNode.y,
+        targetNode.x,
+        targetNode.y
+      )
+
+      if (distance < 20) {
+        targetEdge = edge
+        break
+      }
     }
   }
 
