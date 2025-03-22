@@ -213,4 +213,36 @@ img[src*="logo.svg"] {
   background-color: rgba(0,0,0,0.05);
   z-index: 10;
 }
+
+/* 自定义菜单样式 */
+:deep(.el-menu) {
+  --el-menu-hover-bg-color: var(--el-color-primary-light-9); /* 浅色主题悬停颜色 */
+  --el-menu-active-color: var(--el-color-primary); /* 选中文字颜色 */
+}
+
+/* 深色主题下的菜单样式 */
+.dark :deep(.el-menu) {
+  --el-menu-hover-bg-color: #1f2937; /* 深色主题悬停背景色 - 比主背景稍亮 */
+  --el-menu-bg-color: #111827; /* 深色主题背景色 */
+  --el-menu-text-color: #e5e7eb; /* 深色主题文字颜色 */
+  --el-menu-active-color: #60a5fa; /* 深色主题选中文字颜色 - 亮蓝色 */
+}
+
+/* 深色主题下的菜单项样式 */
+.dark :deep(.el-menu-item):hover {
+  background-color: #1f2937 !important; /* 深色主题悬停背景色 */
+}
+
+.dark :deep(.el-menu-item.is-active) {
+  background-color: #1e3a8a !important; /* 深色主题选中背景色 - 深蓝色 */
+  color: #ffffff !important; /* 改为白色，提高对比度 */
+  font-weight: 500 !important; /* 加粗文字 */
+}
+
+/* 浅色主题下的菜单项样式 */
+:deep(.el-menu-item.is-active) {
+  color: #1e40af !important; /* 浅色主题选中文字颜色 - 深蓝色 */
+  font-weight: 500 !important; /* 加粗文字 */
+  background-color: #eff6ff !important; /* 浅蓝色背景 */
+}
 </style> 
