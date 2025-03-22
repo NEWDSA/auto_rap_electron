@@ -1,5 +1,5 @@
 <template>
-  <div class="tasks-container p-6">
+  <div class="tasks-container p-6 bg-white dark:bg-gray-900">
     <!-- 搜索和操作栏 -->
     <div class="mb-6 flex justify-between items-center">
       <el-input
@@ -497,5 +497,9 @@ onMounted(() => {
 
 :deep(.el-table) {
   @apply flex-1;
+}
+
+:deep(.dark .el-table .cell) {
+  @apply text-gray-300;
 }
 </style> 

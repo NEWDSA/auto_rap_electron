@@ -1331,7 +1331,7 @@ export class AutomationController {
           window._elementPicker.enable()
 
           // 添加键盘事件监听，按ESC键取消选择
-          document.addEventListener('keydown', (event) => {
+          document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape' && window._elementPicker) {
               window._elementPicker.disable()
               window.postMessage({ 
@@ -1339,6 +1339,7 @@ export class AutomationController {
               }, '*')
             }
           })
+        })
 
         const result = await this.page.evaluate(() => {
           return new Promise<{ selector: string, selectorType: string }>((resolve, reject) => {

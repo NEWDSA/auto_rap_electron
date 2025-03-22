@@ -17,7 +17,7 @@
           <!-- 主题切换 -->
           <el-button
             type="text"
-            @click="themeStore.toggleDark()"
+            @click="toggleTheme"
           >
             <el-icon>
               <component :is="themeStore.isDark ? 'Sunny' : 'Moon'" />
@@ -75,11 +75,9 @@
       </el-aside>
 
       <!-- 主内容区 -->
-      <el-main class="bg-gray-100 dark:bg-gray-900">
+      <el-main class="bg-gray-100 dark:bg-gray-900 overflow-auto" ref="mainContent">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
+          <component :is="Component" :key="route.fullPath" />
         </router-view>
       </el-main>
     </el-container>
@@ -87,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useThemeStore } from '@/store/theme'
 
@@ -95,6 +93,7 @@ const route = useRoute()
 const router = useRouter()
 const themeStore = useThemeStore()
 const isCollapse = ref(false)
+const mainContent = ref(null)
 
 // 获取路由列表
 const routes = computed(() => {
@@ -102,14 +101,57 @@ const routes = computed(() => {
   return mainRoute?.children || []
 })
 
-// 获取当前路由
-const currentRoute = computed(() => {
-  return routes.value.find(item => route.path.startsWith('/' + item.path))
-})
+// 处理主题切换
+const toggleTheme = () => {
+  // 切换主题，使用store中的切换函数
+  themeStore.toggleDark()
+}
 
 // 菜单选择
 const handleSelect = (index: string) => {
   router.push(index)
+}
+
+// 监听路由变化
+watch(
+  () => route.path,
+  async () => {
+    // 路由变化时处理
+    await nextTick()
+    
+    // 等待DOM更新后触发resize事件，确保所有组件正确渲染
+    window.dispatchEvent(new Event('resize'))
+    
+    // 延迟触发另一次resize事件，确保异步加载组件也能正确显示
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'))
+      
+      // 如果有主内容区域，强制其更新
+      if (mainContent.value) {
+        const el = mainContent.value as HTMLElement
+        // 临时设置一个样式，然后移除，强制浏览器重新渲染
+        el.style.opacity = '0.99'
+        setTimeout(() => {
+          el.style.opacity = ''
+        }, 10)
+      }
+    }, 200)
+  }
+)
+
+// 组件挂载后逻辑
+onMounted(() => {
+  // 确保初始状态正确
+  window.dispatchEvent(new Event('resize'))
+  
+  // 添加全局事件监听器确保视图正确渲染
+  window.addEventListener('resize', handleResize)
+})
+
+// 处理窗口大小变化
+const handleResize = () => {
+  // 窗口大小变化时可以添加额外逻辑
+  // 例如更新表格或图表尺寸等
 }
 </script>
 
@@ -132,7 +174,7 @@ const handleSelect = (index: string) => {
 }
 
 .el-main {
-  @apply overflow-hidden p-0;
+  @apply p-0;
   height: calc(100vh - var(--header-height));
 }
 
@@ -141,5 +183,32 @@ img[src*="logo.svg"] {
   @apply w-6 h-6;
   max-width: 24px;
   max-height: 24px;
+}
+
+/* 淡入淡出过渡效果 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* 切换状态样式 */
+.switching {
+  position: relative;
+}
+
+.switching::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.05);
+  z-index: 10;
 }
 </style> 
