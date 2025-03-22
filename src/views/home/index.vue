@@ -109,7 +109,7 @@ const quickActions = [
 
 <style lang="postcss">
 .home-container {
-  @apply p-6 w-full max-w-7xl mx-auto;
+  @apply p-6 max-w-7xl mx-auto;
 }
 
 .overview-section {

@@ -1,7 +1,7 @@
 <template>
-  <div class="tasks-container p-6 bg-white dark:bg-gray-900">
+  <div class="tasks-wrapper">
     <!-- 搜索和操作栏 -->
-    <div class="mb-6 flex justify-between items-center">
+    <div class="action-bar">
       <el-input
         v-model="searchQuery"
         placeholder="搜索任务"
@@ -32,67 +32,72 @@
       </el-button-group>
     </div>
 
-    <!-- 任务列表 -->
-    <el-table
-      :data="filteredTasks"
-      border
-      stripe
-      @selection-change="handleSelectionChange"
-      v-loading="loading"
-    >
-      <el-table-column type="selection" width="55" />
-      <el-table-column label="任务名称" prop="name" min-width="200" />
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="getStatusType(row.status)">
-            {{ getStatusText(row.status) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="创建时间" prop="createTime" width="180" />
-      <el-table-column label="最后执行" prop="lastRunTime" width="180" />
-      <el-table-column label="执行次数" prop="runCount" width="100" align="center" />
-      <el-table-column label="操作" width="200" fixed="right">
-        <template #default="{ row }">
-          <el-button-group>
-            <el-button
-              :type="row.status === 'running' ? 'danger' : 'success'"
-              size="small"
-              @click="handleTaskAction(row)"
-            >
-              <el-icon>
-                <component :is="row.status === 'running' ? 'VideoPause' : 'VideoPlay'" />
-              </el-icon>
-              {{ row.status === 'running' ? '停止' : '启动' }}
-            </el-button>
-            <el-button type="primary" size="small" @click="handleEdit(row)">
-              <el-icon><Edit /></el-icon>
-              编辑
-            </el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">
-              <el-icon><Delete /></el-icon>
-              删除
-            </el-button>
-          </el-button-group>
-        </template>
-      </el-table-column>
-    </el-table>
+    <!-- 表格容器 -->
+    <div class="table-wrapper">
+      <!-- 表格区域 - 使用自适应高度 -->
+      <el-table
+        :data="paginatedTasks"
+        border
+        stripe
+        @selection-change="handleSelectionChange"
+        v-loading="loading"
+      >
+        <el-table-column type="selection" width="55" />
+        <el-table-column label="任务名称" prop="name" min-width="200" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)">
+              {{ getStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" prop="createTime" width="180" />
+        <el-table-column label="最后执行" prop="lastRunTime" width="180" />
+        <el-table-column label="执行次数" prop="runCount" width="100" align="center" />
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button-group>
+              <el-button
+                :type="row.status === 'running' ? 'danger' : 'success'"
+                size="small"
+                @click="handleTaskAction(row)"
+              >
+                <el-icon>
+                  <component :is="row.status === 'running' ? 'VideoPause' : 'VideoPlay'" />
+                </el-icon>
+                {{ row.status === 'running' ? '停止' : '启动' }}
+              </el-button>
+              <el-button type="primary" size="small" @click="handleEdit(row)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              <el-button type="danger" size="small" @click="handleDelete(row)">
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </el-button-group>
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <!-- 分页 -->
-    <div class="mt-4 flex justify-end">
-      <el-pagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-      />
+      <!-- 分页区域 - 固定在底部 -->
+      <div class="pagination-footer">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="filteredTasks.length"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
@@ -104,7 +109,6 @@ const searchQuery = ref('')
 // 分页
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(0)
 
 // 加载状态
 const loading = ref(false)
@@ -177,7 +181,6 @@ const loadTasksFromDatabase = async () => {
           content: content // 存储完整配置用于启动任务
         }
       })
-      total.value = tasks.value.length
     } else {
       ElMessage.error('加载任务失败: ' + result.error)
     }
@@ -197,6 +200,27 @@ const filteredTasks = computed(() => {
     task.name.toLowerCase().includes(query)
   )
 })
+
+// 分页后的任务数据
+const paginatedTasks = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredTasks.value.slice(start, end)
+})
+
+// 分页大小变化处理
+const handleSizeChange = (newSize: number) => {
+  pageSize.value = newSize
+  // 如果当前页没有数据，回到第一页
+  if (currentPage.value > Math.ceil(filteredTasks.value.length / pageSize.value)) {
+    currentPage.value = 1
+  }
+}
+
+// 当前页变化处理
+const handleCurrentChange = (newPage: number) => {
+  currentPage.value = newPage
+}
 
 // 获取状态样式
 const getStatusType = (status: string) => {
@@ -411,7 +435,6 @@ const handleBatchDelete = () => {
       
       // 从列表中移除已删除的任务
       tasks.value = tasks.value.filter(t => !selectedTasks.value.find(s => s.id === t.id))
-      total.value = tasks.value.length
       
       if (successCount > 0 && failCount === 0) {
         ElMessage.success(`成功删除 ${successCount} 个任务`)
@@ -472,7 +495,6 @@ const handleDelete = (task: any) => {
       if (result.success) {
         // 从列表中移除任务
         tasks.value = tasks.value.filter(t => t.id !== task.id)
-        total.value = tasks.value.length
         ElMessage.success('删除成功')
       } else {
         ElMessage.error('删除失败: ' + result.error)
@@ -491,14 +513,84 @@ onMounted(() => {
 </script>
 
 <style lang="postcss" scoped>
-.tasks-container {
-  @apply h-full flex flex-col;
+/* 整体容器 - 使用flex布局填充主内容区域 */
+.tasks-wrapper {
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  height: 100%; /* 占满主内容区域高度 */
+  width: 100%;
+  padding: 1.5rem; /* 等同于 p-6 */
+  overflow: hidden; /* 严格防止整体溢出 */
+  box-sizing: border-box; /* 确保padding不会增加总尺寸 */
+  position: relative; /* 改为相对定位 */
 }
 
+.dark .tasks-wrapper {
+  background-color: #111827; /* dark:bg-gray-900 */
+}
+
+/* 操作栏固定高度 */
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem; /* 等同于 mb-6 */
+  flex-shrink: 0; /* 确保高度不会被压缩 */
+}
+
+/* 表格和分页的包装容器 - 占据所有剩余空间 */
+.table-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0; /* 关键设置，允许flex子项收缩 */
+  overflow: hidden; /* 确保容器不会产生滚动条 */
+}
+
+/* 表格自适应高度，但不超过容器 */
 :deep(.el-table) {
-  @apply flex-1;
+  width: 100%;
+  flex: 1; /* 占据table-wrapper中的可用空间 */
+  height: 0; /* 关键设置，与flex: 1结合使表格能正确自适应 */
+  min-height: 200px; /* 设置最小高度，确保表格不会过小 */
 }
 
+/* 表格体可在内容超出时滚动 */
+:deep(.el-table__body-wrapper) {
+  overflow-y: auto;
+}
+
+/* 表头固定 */
+:deep(.el-table__header-wrapper) {
+  overflow: hidden;
+}
+
+/* 分页区域固定高度 */
+.pagination-footer {
+  flex-shrink: 0; /* 确保高度不会被压缩 */
+  padding: 0.75rem 1rem;
+  background-color: white;
+  border-top: 1px solid #EBEEF5;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 60px; /* 固定高度 */
+  margin-top: 0.5rem; /* 轻微间距 */
+}
+
+.dark .pagination-footer {
+  background-color: #111827; /* dark:bg-gray-800 */
+  border-top: 1px solid #374151; /* dark:border-gray-700 */
+}
+
+/* 确保表头不换行 */
+:deep(.el-table__header-wrapper th) {
+  word-break: keep-all;
+  white-space: nowrap;
+}
+
+/* 深色模式下的表格单元格文本颜色 */
 :deep(.dark .el-table .cell) {
   @apply text-gray-300;
 }

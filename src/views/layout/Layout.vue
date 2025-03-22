@@ -130,10 +130,12 @@ watch(
       if (mainContent.value) {
         const el = mainContent.value as HTMLElement
         // 临时设置一个样式，然后移除，强制浏览器重新渲染
-        el.style.opacity = '0.99'
-        setTimeout(() => {
-          el.style.opacity = ''
-        }, 10)
+        if (el && el.style) {
+          el.style.opacity = '0.99'
+          setTimeout(() => {
+            el.style.opacity = ''
+          }, 10)
+        }
       }
     }, 200)
   }
