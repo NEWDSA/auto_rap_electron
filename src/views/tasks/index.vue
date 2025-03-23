@@ -248,9 +248,9 @@ const loadTasksFromDatabase = async () => {
               nodes: content.nodes || [],
               createTime: new Date(config.created_at).getTime(),
               lastRunTime: config.updated_at ? new Date(config.updated_at).getTime() : undefined,
-              executionCount: 0
+              executionCount: content.executionCount !== undefined ? content.executionCount : 0
             };
-            console.log(`配置 ${config.name} (ID: ${config.id}) 转换为任务`);
+            console.log(`配置 ${config.name} (ID: ${config.id}) 转换为任务，执行次数: ${task.executionCount}`);
             return task;
           });
         

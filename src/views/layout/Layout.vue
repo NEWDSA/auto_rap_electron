@@ -7,7 +7,7 @@
         <div class="flex items-center">
           <img src="/logo.png" alt="Logo" class="h-8 w-8" />
           <div class="ml-3">
-            <h2 class="text-lg font-medium">欢迎使用 AutoRAP</h2>
+            <!-- <h2 class="text-lg font-medium">欢迎使用 AutoRPA</h2> -->
             <p class="text-sm text-gray-600 dark:text-gray-400">自动化RPA工具，让流程自动化更简单</p>
           </div>
         </div>

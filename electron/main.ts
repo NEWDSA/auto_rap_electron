@@ -76,27 +76,21 @@ async function createWindow() {
         nodeIntegration: false,
         contextIsolation: true,
         webSecurity: false,
-      },
+      }
     })
+    
+    // 隐藏菜单栏
+    mainWindow.setMenuBarVisibility(false);
 
-    // 初始化录制服务
-    recorderService = new RecorderService(mainWindow, {
-      takeScreenshots: isDev, // 在开发环境下开启截图
-      screenshotDir: path.join(app.getPath('userData'), 'screenshots'),
-    })
-
-    // 加载页面
-    if (isDev) {
-      // 开发环境：加载本地服务
-      mainWindow.loadURL('http://localhost:3000')
-      // 打开开发工具
+    // 根据环境加载不同URL
+    if (process.env.NODE_ENV === 'development') {
+      await mainWindow.loadURL('http://localhost:3000')
       mainWindow.webContents.openDevTools()
     } else {
-      // 生产环境：加载打包后的文件
-      mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+      await mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
     }
 
-    // 监听任务调度器的事件，并通过IPC通知渲染进程
+    // 监听任务调度器的事件并转发到渲染进程
     taskScheduler.on('taskStarted', (task) => {
       if (!mainWindow) return
       mainWindow.webContents.send('scheduler:task-started', task)
@@ -116,6 +110,53 @@ async function createWindow() {
       if (!mainWindow) return
       mainWindow.webContents.send('scheduler:task-stopped', task)
     })
+
+    taskScheduler.on('taskQueued', (task) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-queued', task)
+    })
+
+    taskScheduler.on('taskUpdated', (task) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-updated', task)
+    })
+    
+    // 监听任务执行次数更新事件，更新数据库中的记录
+    taskScheduler.on('taskExecutionCountUpdated', async (data) => {
+      try {
+        // 获取当前配置
+        const config = await dbService.getConfigurationById(data.taskId);
+        if (config) {
+          // 解析配置内容
+          let content = {};
+          try {
+            content = JSON.parse(config.content);
+          } catch (e) {
+            console.error('解析配置内容失败:', e);
+            content = {};
+          }
+          
+          // 更新执行次数
+          content = {
+            ...content,
+            executionCount: data.executionCount
+          };
+          
+          // 保存回数据库
+          await dbService.updateConfiguration(
+            data.taskId, 
+            config.name, 
+            JSON.stringify(content)
+          );
+          
+          console.log(`已更新数据库中任务 ${data.taskId} 的执行次数: ${data.executionCount}`);
+        } else {
+          console.warn(`找不到ID为 ${data.taskId} 的配置记录，无法更新执行次数`);
+        }
+      } catch (error) {
+        console.error('更新任务执行次数失败:', error);
+      }
+    });
 
     taskScheduler.on('taskScheduled', (data) => {
       if (!mainWindow) return

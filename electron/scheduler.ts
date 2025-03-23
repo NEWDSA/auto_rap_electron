@@ -103,7 +103,7 @@ export class TaskScheduler extends EventEmitter {
       ...task,
       id,
       createTime: task.createTime || Date.now(),
-      executionCount: task.executionCount || 0,
+      executionCount: task.executionCount !== undefined ? task.executionCount : 0,
       status: task.scheduleConfig?.enabled ? TaskStatus.SCHEDULED : (task.status || TaskStatus.PENDING)
     };
     
@@ -408,6 +408,12 @@ export class TaskScheduler extends EventEmitter {
       // 记录任务完成日志
       this.logTaskEvent(task, `任务 "${task.name}" (ID: ${taskId}) 执行成功`);
       
+      // 更新数据库中的执行次数
+      this.emit('taskExecutionCountUpdated', {
+        taskId,
+        executionCount: task.executionCount
+      });
+      
       // 通知任务完成
       this.emit('taskCompleted', {
         taskId,
@@ -424,6 +430,12 @@ export class TaskScheduler extends EventEmitter {
       
       // 记录任务失败日志
       this.logTaskEvent(task, `任务 "${task.name}" (ID: ${taskId}) 执行失败: ${error.message}`);
+      
+      // 更新数据库中的执行次数（即使失败也计入执行次数）
+      this.emit('taskExecutionCountUpdated', {
+        taskId,
+        executionCount: task.executionCount
+      });
       
       // 通知任务失败
       this.emit('taskFailed', {
