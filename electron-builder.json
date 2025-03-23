@@ -6,8 +6,11 @@
   },
   "files": [
     "dist/**/*",
-    "electron/**/*"
+    "dist-electron/**/*"
   ],
+  "extraMetadata": {
+    "main": "dist-electron/main.js"
+  },
   "mac": {
     "category": "public.app-category.developer-tools",
     "target": ["dmg", "zip"]

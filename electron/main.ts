@@ -5,6 +5,8 @@ import { AutomationController } from './automation-controller'
 import fs from 'fs/promises'
 import DatabaseService from './database'
 import { RecorderService } from '../src/core/recorder/RecorderService'
+import { TaskScheduler } from './scheduler'
+import { TaskStatus } from './scheduler'
 
 // 是否是开发环境
 const isDev = process.env.NODE_ENV === 'development'
@@ -18,6 +20,9 @@ const dbService = DatabaseService.getInstance()
 // 录制服务实例
 let recorderService: RecorderService
 
+// 初始化数据库服务和自动化控制器
+const taskScheduler = TaskScheduler.getInstance(automationController)
+
 // 打印用户数据目录路径
 console.log('用户数据目录路径:', app.getPath('userData'))
 
@@ -28,11 +33,7 @@ try {
   dbService.getAllConfigurations()
     .then(configs => {
       console.log('数据库连接正常，获取到配置数量:', configs.length)
-      // 尝试插入一条测试数据
-      return dbService.saveConfiguration('test_connection', JSON.stringify({test: true}))
-    })
-    .then(id => {
-      console.log('测试数据插入成功，ID:', id)
+      // 不再自动插入测试数据
     })
     .catch(error => {
       console.error('数据库操作失败:', error)
@@ -58,39 +59,73 @@ function launchChrome() {
   }).unref()
 }
 
-function createWindow() {
-  // 创建浏览器窗口
-  const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 768,
-    icon: isDev 
-      ? path.join(process.cwd(), 'public/logo.png')
-      : path.join(__dirname, '../public/logo.png'),
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      webSecurity: false,
-    },
-  })
+// 创建主窗口
+async function createWindow() {
+  try {
+    // 创建浏览器窗口
+    const mainWindow = new BrowserWindow({
+      width: 1280,
+      height: 800,
+      minWidth: 1024,
+      minHeight: 768,
+      icon: isDev 
+        ? path.join(process.cwd(), 'public/logo.png')
+        : path.join(__dirname, '../public/logo.png'),
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: false,
+      },
+    })
 
-  // 初始化录制服务
-  recorderService = new RecorderService(mainWindow, {
-    takeScreenshots: isDev, // 在开发环境下开启截图
-    screenshotDir: path.join(app.getPath('userData'), 'screenshots'),
-  })
+    // 初始化录制服务
+    recorderService = new RecorderService(mainWindow, {
+      takeScreenshots: isDev, // 在开发环境下开启截图
+      screenshotDir: path.join(app.getPath('userData'), 'screenshots'),
+    })
 
-  // 加载页面
-  if (isDev) {
-    // 开发环境：加载本地服务
-    mainWindow.loadURL('http://localhost:3000')
-    // 打开开发工具
-    mainWindow.webContents.openDevTools()
-  } else {
-    // 生产环境：加载打包后的文件
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    // 加载页面
+    if (isDev) {
+      // 开发环境：加载本地服务
+      mainWindow.loadURL('http://localhost:3000')
+      // 打开开发工具
+      mainWindow.webContents.openDevTools()
+    } else {
+      // 生产环境：加载打包后的文件
+      mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    }
+
+    // 监听任务调度器的事件，并通过IPC通知渲染进程
+    taskScheduler.on('taskStarted', (task) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-started', task)
+    })
+
+    taskScheduler.on('taskCompleted', (result) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-completed', result)
+    })
+
+    taskScheduler.on('taskFailed', (result) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-failed', result)
+    })
+
+    taskScheduler.on('taskStopped', (task) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-stopped', task)
+    })
+
+    taskScheduler.on('taskScheduled', (data) => {
+      if (!mainWindow) return
+      mainWindow.webContents.send('scheduler:task-scheduled', data)
+    })
+    
+    return mainWindow
+  } catch (error) {
+    console.error('创建窗口失败:', error)
+    return null
   }
 }
 
@@ -126,7 +161,13 @@ ipcMain.handle('recorder:stop', async () => {
 
 ipcMain.handle('flow:start', async (_, nodes) => {
   try {
-    await automationController.start(nodes)
+    // 创建临时任务并启动
+    const tempTask = taskScheduler.addTask({
+      name: '临时任务',
+      status: TaskStatus.PENDING,
+      nodes: nodes
+    })
+    await taskScheduler.startTask(tempTask.id)
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error.message }
@@ -135,7 +176,14 @@ ipcMain.handle('flow:start', async (_, nodes) => {
 
 ipcMain.handle('flow:stop', async () => {
   try {
-    await automationController.stop()
+    // 获取当前运行的任务并停止
+    const tasks = taskScheduler.getAllTasks()
+    const runningTask = tasks.find(task => task.status === TaskStatus.RUNNING)
+    if (runningTask) {
+      await taskScheduler.stopTask(runningTask.id)
+    } else {
+      await automationController.stop()
+    }
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error.message }
@@ -447,6 +495,111 @@ ipcMain.handle('recorder:capture-action', async (_, action) => {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
+
+// 注册任务调度相关的IPC处理程序
+ipcMain.handle('scheduler:get-all-tasks', async () => {
+  try {
+    const tasks = taskScheduler.getAllTasks()
+    return { success: true, data: tasks }
+  } catch (error: any) {
+    console.error('获取所有任务失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('scheduler:get-task', async (_, taskId) => {
+  try {
+    const task = taskScheduler.getTask(taskId)
+    return { success: true, data: task }
+  } catch (error: any) {
+    console.error('获取任务详情失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('scheduler:add-task', async (_, taskData) => {
+  try {
+    const newTask = taskScheduler.addTask(taskData)
+    return { success: true, data: newTask }
+  } catch (error: any) {
+    console.error('添加任务失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('scheduler:update-task', async (_, taskId, updates) => {
+  try {
+    const updatedTask = taskScheduler.updateTask(taskId, updates)
+    return { success: true, data: updatedTask }
+  } catch (error: any) {
+    console.error('更新任务失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('scheduler:delete-task', async (_, taskId) => {
+  try {
+    console.log(`收到删除任务请求，任务ID: ${taskId}`);
+    
+    // 首先检查任务是否存在于调度器中
+    const taskExists = taskScheduler.getTask(taskId);
+    console.log(`任务检查结果: ${taskExists ? '存在' : '不存在'}`);
+    
+    // 删除任务调度器中的任务
+    const result = taskScheduler.deleteTask(taskId);
+    console.log(`从调度器删除任务结果: ${result ? '成功' : '失败'}`);
+    
+    // 同时删除数据库中的配置记录
+    if (result) {
+      try {
+        // 先检查配置是否存在
+        const configExists = await dbService.getConfigurationById(taskId);
+        console.log(`数据库中配置检查结果: ${configExists ? '存在' : '不存在'}, ID: ${taskId}`);
+        
+        await dbService.deleteConfiguration(taskId);
+        console.log('已从数据库删除配置记录 ID:', taskId);
+      } catch (dbError) {
+        console.warn('从数据库删除配置记录失败:', dbError);
+        // 即使数据库删除失败，也返回调度器删除成功的结果
+      }
+    }
+    
+    return { success: result };
+  } catch (error: any) {
+    console.error('删除任务失败:', error);
+    return { success: false, error: error.message };
+  }
+})
+
+ipcMain.handle('scheduler:start-task', async (_, taskId) => {
+  try {
+    const result = await taskScheduler.startTask(taskId)
+    return { success: result }
+  } catch (error: any) {
+    console.error('启动任务失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('scheduler:stop-task', async (_, taskId) => {
+  try {
+    const result = await taskScheduler.stopTask(taskId)
+    return { success: result }
+  } catch (error: any) {
+    console.error('停止任务失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('scheduler:get-task-log', async (_, taskId) => {
+  try {
+    const log = taskScheduler.getTaskLog(taskId)
+    return { success: true, data: log }
+  } catch (error: any) {
+    console.error('获取任务日志失败:', error)
+    return { success: false, error: error.message }
+  }
+})
 
 // 应用程序准备就绪时创建窗口
 app.whenReady().then(() => {

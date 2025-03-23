@@ -4,78 +4,110 @@
     <div class="action-bar">
       <el-input
         v-model="searchQuery"
-        placeholder="搜索任务"
-        class="w-64"
+        placeholder="搜索任务名称"
+        class="search-input"
+        clearable
+        @clear="filterTasks"
+        @input="filterTasks"
       >
         <template #prefix>
           <el-icon><Search /></el-icon>
         </template>
       </el-input>
 
-      <el-button-group>
+      <div class="button-group">
         <el-button type="primary" @click="handleRefresh">
-          <el-icon><Refresh /></el-icon>
+          <el-icon><RefreshRight /></el-icon>
           刷新
         </el-button>
-        <el-button type="success" @click="handleBatchStart">
+        <el-button type="success" @click="handleBatchStart" :disabled="!selectedTasks.length">
           <el-icon><VideoPlay /></el-icon>
           批量启动
         </el-button>
-        <el-button type="danger" @click="handleBatchStop">
+        <el-button type="warning" @click="handleBatchStop" :disabled="!selectedTasks.length">
           <el-icon><VideoPause /></el-icon>
           批量停止
         </el-button>
-        <el-button type="danger" @click="handleBatchDelete">
+        <el-button type="danger" @click="handleBatchDelete" :disabled="!selectedTasks.length">
           <el-icon><Delete /></el-icon>
           批量删除
         </el-button>
-      </el-button-group>
+      </div>
     </div>
 
     <!-- 表格容器 -->
     <div class="table-wrapper">
       <!-- 表格区域 - 使用自适应高度 -->
       <el-table
-        :data="paginatedTasks"
-        border
-        stripe
+        ref="multipleTable"
+        :data="filteredTasks"
+        style="width: 100%"
         @selection-change="handleSelectionChange"
-        v-loading="loading"
+        height="100%"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column label="任务名称" prop="name" min-width="200" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusText(row.status) }}
+        <el-table-column prop="name" label="任务名称" width="180" />
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="getStatusType(scope.row.status)" effect="dark">
+              {{ getStatusText(scope.row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" prop="createTime" width="180" />
-        <el-table-column label="最后执行" prop="lastRunTime" width="180" />
-        <el-table-column label="执行次数" prop="runCount" width="100" align="center" />
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button-group>
-              <el-button
-                :type="row.status === 'running' ? 'danger' : 'success'"
-                size="small"
-                @click="handleTaskAction(row)"
+        <el-table-column prop="createTime" label="创建时间" width="180">
+          <template #default="scope">
+            {{ new Date(scope.row.createTime).toLocaleString() }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="lastRunTime" label="上次运行时间" width="180">
+          <template #default="scope">
+            {{ scope.row.lastRunTime ? new Date(scope.row.lastRunTime).toLocaleString() : '从未运行' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="executionCount" label="执行次数" width="100" />
+        
+        <el-table-column prop="nextRunTime" label="下次执行时间" width="180">
+          <template #default="scope">
+            {{ scope.row.scheduleConfig?.nextRunTime 
+              ? new Date(scope.row.scheduleConfig.nextRunTime).toLocaleString() 
+              : '未调度' }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column fixed="right" label="操作" width="300">
+          <template #default="scope">
+            <div class="operation-buttons">
+              <el-button 
+                size="small" 
+                :type="scope.row.status === 'running' ? 'warning' : 'success'"
+                @click="handleTaskAction(scope.row)"
               >
-                <el-icon>
-                  <component :is="row.status === 'running' ? 'VideoPause' : 'VideoPlay'" />
-                </el-icon>
-                {{ row.status === 'running' ? '停止' : '启动' }}
+                {{ scope.row.status === 'running' ? '停止' : '启动' }}
               </el-button>
-              <el-button type="primary" size="small" @click="handleEdit(row)">
-                <el-icon><Edit /></el-icon>
+              <el-button
+                size="small"
+                type="primary"
+                @click="handleEdit(scope.row)"
+              >
                 编辑
               </el-button>
-              <el-button type="danger" size="small" @click="handleDelete(row)">
-                <el-icon><Delete /></el-icon>
+              
+              <el-button
+                size="small"
+                type="info"
+                @click="handleSchedule(scope.row)"
+              >
+                调度
+              </el-button>
+              
+              <el-button
+                size="small"
+                type="danger"
+                @click="handleDelete(scope.row)"
+              >
                 删除
               </el-button>
-            </el-button-group>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -93,6 +125,21 @@
         />
       </div>
     </div>
+
+    <!-- 新增：任务调度对话框 -->
+    <el-dialog
+      v-model="scheduleDialogVisible"
+      title="任务调度设置"
+      width="700px"
+      destroy-on-close
+    >
+      <ScheduleComponent
+        v-if="scheduleDialogVisible"
+        :task-id="currentTaskId"
+        @schedule-saved="handleScheduleSaved"
+        @schedule-canceled="scheduleDialogVisible = false"
+      />
+    </el-dialog>
   </div>
 </template>
 
@@ -100,6 +147,8 @@
 import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { Search, RefreshRight, VideoPlay, VideoPause } from '@element-plus/icons-vue'
+import ScheduleComponent from './schedule.vue'
 
 const router = useRouter()
 
@@ -118,6 +167,10 @@ const selectedTasks = ref<any[]>([])
 
 // 任务数据
 const tasks = ref<any[]>([])
+
+// 调度对话框相关
+const scheduleDialogVisible = ref(false)
+const currentTaskId = ref(0)
 
 // 深度清理对象，确保可序列化
 const deepCleanObject = (obj: any): any => {
@@ -156,39 +209,80 @@ const deepCleanObject = (obj: any): any => {
 
 // 从数据库加载任务
 const loadTasksFromDatabase = async () => {
-  loading.value = true
+  loading.value = true;
   try {
-    const result = await window.electronAPI.invoke('get-all-configurations')
-    if (result.success) {
-      // 将数据库结果转换为任务格式
-      tasks.value = result.data.map((config: any) => {
-        // 尝试解析存储的内容
-        let content = null
-        try {
-          content = JSON.parse(config.content)
-        } catch (e) {
-          console.error('解析任务内容失败:', e)
-          content = { error: '无效的任务内容' }
+    // 先尝试从调度器API获取任务
+    const schedulerResult = await window.electronAPI.invoke('scheduler:get-all-tasks');
+    if (schedulerResult.success && schedulerResult.data && schedulerResult.data.length > 0) {
+      // 过滤掉名为"test_connection"的测试任务
+      const filteredTasks = schedulerResult.data.filter(task => task.name !== 'test_connection');
+      tasks.value = filteredTasks;
+      console.log('从调度器获取到任务数据(过滤后):', tasks.value.length);
+      console.log('任务ID列表:', tasks.value.map(t => t.id));
+    } else {
+      // 如果调度器没有任务数据，从配置数据库加载并转换
+      console.log('调度器无任务数据，尝试从配置数据库加载');
+      const configResult = await window.electronAPI.invoke('get-all-configurations');
+      if (configResult.success) {
+        console.log('从配置数据库获取到数据:', configResult.data.length);
+        console.log('配置ID列表:', configResult.data.map(c => c.id));
+        
+        // 将配置数据转换为任务格式（过滤掉测试任务）
+        const configTasks = configResult.data
+          .filter(config => config.name !== 'test_connection')
+          .map((config: any) => {
+            // 尝试解析存储的内容
+            let content = null;
+            try {
+              content = JSON.parse(config.content);
+            } catch (e) {
+              console.error('解析任务内容失败:', e);
+              content = { error: '无效的任务内容', nodes: [] };
+            }
+            
+            // 创建任务对象
+            const task = {
+              id: config.id, // 使用配置的ID作为任务ID
+              name: config.name,
+              status: 'stopped',
+              nodes: content.nodes || [],
+              createTime: new Date(config.created_at).getTime(),
+              lastRunTime: config.updated_at ? new Date(config.updated_at).getTime() : undefined,
+              executionCount: 0
+            };
+            console.log(`配置 ${config.name} (ID: ${config.id}) 转换为任务`);
+            return task;
+          });
+        
+        // 将转换后的任务保存到调度器
+        for (const task of configTasks) {
+          try {
+            const result = await window.electronAPI.invoke('scheduler:add-task', task);
+            console.log(`已将配置 ${task.name} (ID: ${task.id}) 转换为任务，结果:`, result.data.id);
+            if (task.id !== result.data.id) {
+              console.warn(`警告: 任务ID不匹配! 配置ID: ${task.id}, 任务ID: ${result.data.id}`);
+            }
+          } catch (error) {
+            console.error(`转换配置 ${task.name} (ID: ${task.id}) 失败:`, error);
+          }
         }
         
-        return {
-          id: config.id,
-          name: config.name,
-          status: 'stopped', // 默认状态
-          createTime: new Date(config.created_at).toLocaleString(),
-          lastRunTime: config.updated_at ? new Date(config.updated_at).toLocaleString() : '-',
-          runCount: 0, // 默认执行次数
-          content: content // 存储完整配置用于启动任务
+        // 重新从调度器获取任务
+        const updatedResult = await window.electronAPI.invoke('scheduler:get-all-tasks');
+        if (updatedResult.success) {
+          tasks.value = updatedResult.data;
+          console.log('更新后从调度器获取到任务数据:', tasks.value.length);
+          console.log('更新后任务ID列表:', tasks.value.map(t => t.id));
         }
-      })
-    } else {
-      ElMessage.error('加载任务失败: ' + result.error)
+      } else {
+        ElMessage.error('加载任务失败: ' + configResult.error);
+      }
     }
   } catch (error) {
-    console.error('加载任务出错:', error)
-    ElMessage.error('加载任务出错')
+    console.error('加载任务列表出错:', error);
+    ElMessage.error('加载任务列表出错');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -227,7 +321,10 @@ const getStatusType = (status: string) => {
   const types: Record<string, string> = {
     running: 'success',
     stopped: 'danger',
-    pending: 'warning'
+    pending: 'warning',
+    completed: 'info',
+    failed: 'danger',
+    scheduled: 'primary'
   }
   return types[status] || 'info'
 }
@@ -237,7 +334,10 @@ const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
     running: '运行中',
     stopped: '已停止',
-    pending: '等待中'
+    pending: '等待中',
+    completed: '已完成',
+    failed: '失败',
+    scheduled: '已调度'
   }
   return texts[status] || status
 }
@@ -256,37 +356,12 @@ const handleRefresh = () => {
 // 启动任务
 const startTask = async (task: any) => {
   try {
-    // 确保 task.content 包含 nodes 属性
-    if (!task.content || !task.content.nodes) {
-      ElMessage.error('任务数据格式不正确')
-      return
-    }
-    
-    // 深度克隆并清理节点数据，移除可能导致序列化问题的属性
-    const cleanNodes = task.content.nodes.map((node: any) => {
-      // 创建一个新对象，只包含必要的属性
-      const cleanNode = {
-        id: node.id,
-        type: node.type,
-        x: node.x,
-        y: node.y,
-        text: node.text,
-        // 深度清理 properties 对象
-        properties: deepCleanObject(node.properties || {})
-      };
-      
-      return cleanNode;
-    });
-    
-    // 确保可以序列化
-    const serializedNodes = JSON.parse(JSON.stringify(cleanNodes));
-    
-    // 传递清理后的节点数组
-    const result = await window.electronAPI.invoke('flow:start', serializedNodes);
+    // 使用调度器API启动任务
+    const result = await window.electronAPI.invoke('scheduler:start-task', task.id);
     if (result.success) {
-      // 更新任务状态
-      task.status = 'running'
       ElMessage.success('任务启动成功')
+      // 刷新任务列表
+      loadTasksFromDatabase()
     } else {
       ElMessage.error('任务启动失败: ' + result.error)
     }
@@ -299,11 +374,12 @@ const startTask = async (task: any) => {
 // 停止任务
 const stopTask = async (task: any) => {
   try {
-    const result = await window.electronAPI.invoke('flow:stop')
+    // 使用调度器API停止任务
+    const result = await window.electronAPI.invoke('scheduler:stop-task', task.id)
     if (result.success) {
-      // 更新任务状态
-      task.status = 'stopped'
       ElMessage.success('任务停止成功')
+      // 刷新任务列表
+      loadTasksFromDatabase()
     } else {
       ElMessage.error('任务停止失败: ' + result.error)
     }
@@ -326,40 +402,9 @@ const handleBatchStart = async () => {
     
     for (const task of selectedTasks.value) {
       try {
-        // 确保 task.content 包含 nodes 属性
-        if (!task.content || !task.content.nodes) {
-          failCount++
-          continue
-        }
-        
-        // 深度克隆并清理节点数据，移除可能导致序列化问题的属性
-        const cleanNodes = task.content.nodes.map((node: any) => {
-          // 创建一个新对象，只包含必要的属性
-          const cleanNode = {
-            id: node.id,
-            type: node.type,
-            x: node.x,
-            y: node.y,
-            text: node.text,
-            // 深度清理 properties 对象
-            properties: deepCleanObject(node.properties || {})
-          };
-          
-          return cleanNode;
-        });
-        
-        // 确保可以序列化
-        const serializedNodes = JSON.parse(JSON.stringify(cleanNodes));
-        
         // 启动任务
-        const result = await window.electronAPI.invoke('flow:start', serializedNodes);
-        if (result.success) {
-          // 更新任务状态
-          task.status = 'running'
-          successCount++
-        } else {
-          failCount++
-        }
+        await startTask(task)
+        successCount++
       } catch (error) {
         console.error('启动任务出错:', error)
         failCount++
@@ -421,10 +466,13 @@ const handleBatchDelete = () => {
       
       for (const task of selectedTasks.value) {
         try {
-          const result = await window.electronAPI.invoke('delete-configuration', task.id)
+          // 直接调用API删除任务，而不是调用handleDelete函数
+          const result = await window.electronAPI.invoke('scheduler:delete-task', task.id)
           if (result.success) {
+            // 主进程已经处理数据库删除，这里不需要重复操作
             successCount++
           } else {
+            console.error('删除任务失败:', result.error)
             failCount++
           }
         } catch (error) {
@@ -433,8 +481,11 @@ const handleBatchDelete = () => {
         }
       }
       
-      // 从列表中移除已删除的任务
-      tasks.value = tasks.value.filter(t => !selectedTasks.value.find(s => s.id === t.id))
+      // 重新加载任务列表以确保UI和数据库同步
+      await loadTasksFromDatabase()
+      
+      // 清空选中项
+      selectedTasks.value = []
       
       if (successCount > 0 && failCount === 0) {
         ElMessage.success(`成功删除 ${successCount} 个任务`)
@@ -479,6 +530,20 @@ const handleEdit = async (task: any) => {
   }
 }
 
+// 打开调度设置对话框
+const handleSchedule = (task: any) => {
+  currentTaskId.value = task.id
+  scheduleDialogVisible.value = true
+}
+
+// 调度设置保存回调
+const handleScheduleSaved = (updatedTask: any) => {
+  scheduleDialogVisible.value = false
+  // 刷新任务列表
+  loadTasksFromDatabase()
+  ElMessage.success('任务调度设置已更新')
+}
+
 // 删除任务
 const handleDelete = (task: any) => {
   ElMessageBox.confirm(
@@ -491,10 +556,14 @@ const handleDelete = (task: any) => {
     }
   ).then(async () => {
     try {
-      const result = await window.electronAPI.invoke('delete-configuration', task.id)
+      // 使用调度器API删除任务
+      const result = await window.electronAPI.invoke('scheduler:delete-task', task.id)
       if (result.success) {
-        // 从列表中移除任务
-        tasks.value = tasks.value.filter(t => t.id !== task.id)
+        // 主进程已经处理数据库删除，这里不需要重复操作
+        
+        // 重新加载任务列表以确保UI和数据库同步
+        await loadTasksFromDatabase()
+        
         ElMessage.success('删除成功')
       } else {
         ElMessage.error('删除失败: ' + result.error)
@@ -504,6 +573,11 @@ const handleDelete = (task: any) => {
       ElMessage.error('删除任务出错')
     }
   }).catch(() => {})
+}
+
+// 根据搜索过滤任务
+const filterTasks = () => {
+  currentPage.value = 1 // 重置到第一页
 }
 
 // 组件挂载时加载任务
@@ -537,6 +611,20 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 1.5rem; /* 等同于 mb-6 */
   flex-shrink: 0; /* 确保高度不会被压缩 */
+}
+
+/* 限制搜索框宽度 */
+.search-input {
+  max-width: 250px; /* 限制搜索框最大宽度 */
+  width: 250px; /* 固定宽度 */
+}
+
+/* 操作按钮组样式 */
+.operation-buttons {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 /* 表格和分页的包装容器 - 占据所有剩余空间 */

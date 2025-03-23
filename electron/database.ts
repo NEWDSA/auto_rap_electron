@@ -1,27 +1,29 @@
-import sqlite3 from 'sqlite3';
 import { join } from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
-interface SqliteCallback {
-    (err: Error | null): void;
-}
-
-interface SqliteRunResult {
-    lastID: number;
-    changes: number;
+// 简单内存数据库实现
+interface Configuration {
+    id: number;
+    name: string;
+    content: string;
+    created_at: string;
+    updated_at: string;
 }
 
 class DatabaseService {
-    private db: sqlite3.Database;
+    private data: {
+        configurations: Configuration[];
+        nextId: number;
+    };
     private static instance: DatabaseService;
     private static dbPath: string;
 
     private constructor() {
         // 如果没有自定义路径，使用默认路径
         if (!DatabaseService.dbPath) {
-            DatabaseService.dbPath = join(app.getPath('userData'), 'data.db');
+            DatabaseService.dbPath = join(app.getPath('userData'), 'data.json');
         }
         
         // 确保目录存在
@@ -31,8 +33,41 @@ class DatabaseService {
         }
         
         console.log('使用数据库路径:', DatabaseService.dbPath);
-        this.db = new sqlite3.Database(DatabaseService.dbPath);
-        this.initTables();
+        
+        // 初始化内存数据
+        this.data = {
+            configurations: [],
+            nextId: 1
+        };
+        
+        // 尝试从文件加载数据
+        this.loadFromFile();
+    }
+
+    // 从文件加载数据
+    private loadFromFile(): void {
+        try {
+            if (fs.existsSync(DatabaseService.dbPath)) {
+                const fileContent = fs.readFileSync(DatabaseService.dbPath, 'utf8');
+                this.data = JSON.parse(fileContent);
+            }
+        } catch (error) {
+            console.error('加载数据文件失败:', error);
+            // 初始化为空数据
+            this.data = {
+                configurations: [],
+                nextId: 1
+            };
+        }
+    }
+
+    // 将数据保存到文件
+    private saveToFile(): void {
+        try {
+            fs.writeFileSync(DatabaseService.dbPath, JSON.stringify(this.data, null, 2), 'utf8');
+        } catch (error) {
+            console.error('保存数据文件失败:', error);
+        }
     }
 
     public static getInstance(): DatabaseService {
@@ -49,8 +84,6 @@ class DatabaseService {
         
         // 如果实例已存在，需要重新初始化
         if (DatabaseService.instance) {
-            // 关闭现有连接
-            DatabaseService.instance.close();
             // 重置实例，让下次获取实例时重新创建
             (DatabaseService as any).instance = undefined;
         }
@@ -59,111 +92,67 @@ class DatabaseService {
     // 获取当前数据库路径
     public static getDatabasePath(): string {
         if (!DatabaseService.dbPath) {
-            DatabaseService.dbPath = join(app.getPath('userData'), 'data.db');
+            DatabaseService.dbPath = join(app.getPath('userData'), 'data.json');
         }
         return DatabaseService.dbPath;
     }
     
-    // 关闭数据库连接
-    private close(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.db.close((err) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
-        });
-    }
-
-    private initTables(): void {
-        this.db.run(`
-            CREATE TABLE IF NOT EXISTS configurations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+    // 关闭数据库连接（保存数据到文件）
+    private close(): void {
+        this.saveToFile();
     }
 
     public saveConfiguration(name: string, content: string): Promise<number> {
         console.log('保存配置到数据库:', name, '数据长度:', content ? content.length : 0)
-        return new Promise((resolve, reject) => {
-            try {
-                const stmt = this.db.prepare(
-                    `INSERT INTO configurations (name, content) VALUES (?, ?)`
-                );
-                console.log('SQL语句准备完成')
-                stmt.run(name, content, function(this: SqliteRunResult, err: Error | null) {
-                    if (err) {
-                        console.error('SQL执行错误:', err)
-                        reject(err);
-                    } else {
-                        console.log('SQL执行成功, ID:', this.lastID)
-                        resolve(this.lastID);
-                    }
-                });
-            } catch (error) {
-                console.error('准备SQL语句错误:', error)
-                reject(error);
-            }
+        return new Promise((resolve) => {
+            const now = new Date().toISOString();
+            const id = this.data.nextId++;
+            
+            this.data.configurations.push({
+                id,
+                name,
+                content,
+                created_at: now,
+                updated_at: now
+            });
+            
+            this.saveToFile();
+            console.log('保存成功, ID:', id);
+            resolve(id);
         });
     }
 
-    public getAllConfigurations(): Promise<any[]> {
-        return new Promise((resolve, reject) => {
-            this.db.all('SELECT * FROM configurations', (err: Error | null, rows: any[]) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows);
-                }
-            });
-        });
+    public getAllConfigurations(): Promise<Configuration[]> {
+        return Promise.resolve([...this.data.configurations]);
     }
 
-    public getConfigurationById(id: number): Promise<any> {
-        return new Promise((resolve, reject) => {
-            this.db.get('SELECT * FROM configurations WHERE id = ?', [id], (err: Error | null, row: any) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row);
-                }
-            });
-        });
+    public getConfigurationById(id: number): Promise<Configuration | undefined> {
+        return Promise.resolve(
+            this.data.configurations.find(config => config.id === id)
+        );
     }
 
     public updateConfiguration(id: number, name: string, content: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const stmt = this.db.prepare(
-                `UPDATE configurations 
-                 SET name = ?, content = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ?`
-            );
-            stmt.run(name, content, id, (err: Error | null) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
+        return new Promise((resolve) => {
+            const index = this.data.configurations.findIndex(config => config.id === id);
+            if (index !== -1) {
+                this.data.configurations[index] = {
+                    ...this.data.configurations[index],
+                    name,
+                    content,
+                    updated_at: new Date().toISOString()
+                };
+                this.saveToFile();
+            }
+            resolve();
         });
     }
 
     public deleteConfiguration(id: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const stmt = this.db.prepare('DELETE FROM configurations WHERE id = ?');
-            stmt.run(id, (err: Error | null) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
+        return new Promise((resolve) => {
+            this.data.configurations = this.data.configurations.filter(config => config.id !== id);
+            this.saveToFile();
+            resolve();
         });
     }
 }

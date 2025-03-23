@@ -32,7 +32,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'recorder:capture-action',
       'test-ipc-channel',
       // 自动化相关通道
-      'automation:export-data'
+      'automation:export-data',
+      // 任务调度相关通道
+      'scheduler:get-all-tasks',
+      'scheduler:get-task',
+      'scheduler:add-task',
+      'scheduler:update-task',
+      'scheduler:delete-task',
+      'scheduler:start-task',
+      'scheduler:stop-task',
+      'scheduler:get-task-log'
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
@@ -47,7 +56,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const validChannels = [
       'recorder:action-captured',
       'recorder:recording-completed',
-      'automation:export-data'
+      'automation:export-data',
+      // 任务调度相关事件通道
+      'scheduler:task-started',
+      'scheduler:task-completed',
+      'scheduler:task-failed',
+      'scheduler:task-stopped',
+      'scheduler:task-scheduled'
     ]
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, callback)
