@@ -1,8 +1,6 @@
 import type { Component, DefineComponent } from 'vue'
 import type * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { RectNodeModel } from '@logicflow/core'
-import type { LogicFlow } from '@logicflow/core'
-import type { RectNode } from '@logicflow/core'
 
 // 扩展 RectNodeModel 的类型定义
 declare module '@logicflow/core' {
@@ -112,11 +110,6 @@ export interface NodeProperties {
   extractInnerHTML?: boolean
   trimContent?: boolean
   waitForVisible?: boolean
-  timeout?: number
-  columns?: Array<{
-    name: string
-    selector: string
-  }>
 
   description?: string
 
@@ -196,7 +189,7 @@ export interface EdgeProperties {
   text?: string
 }
 
-class CustomNodeModel extends RectNodeModel {
+export class CustomNodeModel extends RectNodeModel {
   getNodeStyle() {
     const style = super.getNodeStyle()
     return {

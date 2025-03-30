@@ -1,14 +1,14 @@
-import { ExportUtils } from './exportUtils'
+import { ExportUtils, ExportOptions } from './exportUtils'
+import { IpcRendererEvent } from 'electron'
 
-// 为window对象添加electronAPI接口
-declare global {
-  interface Window {
-    electronAPI: {
-      on: (channel: string, callback: (event: any, ...args: any[]) => void) => void
-      invoke: (channel: string, ...args: any[]) => Promise<any>
-      // 其他可能的electronAPI方法
-    }
+interface ExportMessage {
+  options: {
+    type: 'excel' | 'csv' | 'json' | 'docx' | 'pdf' | 'image' | 'txt'
+    fileName: string
+    saveMode: 'auto' | 'select'
+    savePath?: string
   }
+  data: any[]
 }
 
 // 初始化IPC处理程序
@@ -22,7 +22,7 @@ export function initializeIpcHandlers() {
   console.log('开始初始化IPC事件处理程序...')
 
   // 监听导出数据请求
-  window.electronAPI.on('automation:export-data', async (event, message) => {
+  window.electronAPI.on('automation:export-data', async (event: IpcRendererEvent, message: ExportMessage) => {
     try {
       if (!message || !message.options) {
         console.error('导出数据无效: 未收到有效的选项')
@@ -53,7 +53,7 @@ export function initializeIpcHandlers() {
       
       try {
         // 使用ExportUtils执行导出操作
-        await ExportUtils.exportData(data, options)
+        await ExportUtils.exportData(data, options as ExportOptions)
         console.log('数据导出成功完成')
       } catch (error) {
         console.error('导出操作失败:', error)

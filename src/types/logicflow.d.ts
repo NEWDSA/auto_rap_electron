@@ -40,6 +40,30 @@ declare module '@logicflow/core' {
       }
     }
   }
+
+  class RectNodeModel {
+    width: number;
+    height: number;
+    radius: number;
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    text: {
+      value: string;
+      x: number;
+      y: number;
+      fontSize: number;
+      color: string;
+      textAlign: string;
+      textBaseline: string;
+    };
+    getNodeStyle(): Record<string, any>;
+  }
+
+  interface BezierEdgeModel {
+    strokeWidth: number;
+    getEdgeStyle(): Record<string, any>;
+  }
 }
 
 declare module '@logicflow/extension' {

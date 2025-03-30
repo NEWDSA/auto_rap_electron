@@ -1,4 +1,4 @@
-import { chromium, Browser, Page } from 'playwright'
+import { chromium, Browser, Page, BrowserContext, Locator } from 'playwright'
 import type { FlowNode, NodeProperties } from '../src/types/node-config'
 import { ExportUtils } from '../src/utils/exportUtils'
 
@@ -126,8 +126,8 @@ export class AutomationController {
         try {
           console.log('关闭现有浏览器实例，准备重新启动...');
           await this.browser.close();
-        } catch (e) {
-          console.warn('关闭浏览器时出错:', e);
+        } catch (error: unknown) {
+          console.warn('关闭浏览器时出错:', error);
           // 忽略关闭错误
         }
         this.browser = null;
@@ -136,10 +136,46 @@ export class AutomationController {
 
       // 启动新的浏览器实例
       console.log('启动新的浏览器实例...');
-      this.browser = await chromium.launch({
-        headless: false,
-        args: ['--disable-web-security', '--disable-features=IsolateOrigins', '--disable-site-isolation-trials']
-      });
+      try {
+        const { app } = require('electron');
+        const path = require('path');
+        const os = require('os');
+
+        // 获取 Chromium 路径
+        let chromiumPath: string;
+        if (app.isPackaged) {
+          // 在打包后的环境中
+          chromiumPath = path.join(process.resourcesPath, 'chromium', 'chrome-win', 'chrome.exe');
+          console.log('打包环境 Chromium 路径:', chromiumPath);
+        } else {
+          // 在开发环境中
+          chromiumPath = path.join(
+            os.homedir(),
+            'AppData',
+            'Local',
+            'ms-playwright',
+            'chromium-1097',
+            'chrome.exe'
+          );
+          console.log('开发环境 Chromium 路径:', chromiumPath);
+        }
+
+        console.log('尝试使用 Chromium 路径:', chromiumPath);
+
+        this.browser = await chromium.launch({
+          headless: false,
+          executablePath: chromiumPath,
+          args: ['--disable-web-security', '--disable-features=IsolateOrigins', '--disable-site-isolation-trials']
+        });
+        console.log('浏览器启动成功');
+      } catch (error) {
+        console.error('使用指定路径启动浏览器失败:', error);
+        console.log('尝试使用默认配置启动浏览器...');
+        this.browser = await chromium.launch({
+          headless: false,
+          args: ['--disable-web-security', '--disable-features=IsolateOrigins', '--disable-site-isolation-trials']
+        });
+      }
 
       // 创建新的页面
       console.log('创建新的页面...');
@@ -261,7 +297,7 @@ export class AutomationController {
         targetSelector = result.selector
         // 更新节点属性
         properties.selector = result.selector
-        properties.selectorType = result.selectorType
+        properties.selectorType = result.selectorType as "css" | "xpath" | "id" | "class" | "name"
       } catch (error: any) {
         throw new Error(`选择点击元素失败: ${error.message}`)
       }
@@ -328,11 +364,11 @@ export class AutomationController {
       if (waitAfterClick && clickTimeout) {
         // 等待URL变化（针对分页场景）
         try {
-          await this.page.waitForURL(url => url !== currentUrl, { 
+          await this.page.waitForURL((url: URL) => url.toString() !== currentUrl, { 
             timeout: clickTimeout * 1000,
             waitUntil: 'networkidle'
           })
-        } catch (error) {
+        } catch (error: unknown) {
           // 如果URL没有变化，可能不是分页操作，继续等待页面加载
           await this.page.waitForLoadState('networkidle', { 
             timeout: clickTimeout * 1000 
@@ -348,7 +384,7 @@ export class AutomationController {
         await this.page.waitForTimeout(1000)
       }
     } catch (error: any) {
-      const errorMessage = error.message || '未知错误'
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
       throw new Error(`点击元素失败: ${errorMessage}`)
     }
   }
@@ -475,7 +511,7 @@ export class AutomationController {
       console.log('浏览器操作完成');
     } catch (error) {
       console.error('执行浏览器操作失败:', error);
-      throw new Error(`浏览器操作失败: ${error.message}`);
+      throw new Error(`浏览器操作失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -1433,7 +1469,7 @@ export class AutomationController {
 
       // 根据选择器类型构建实际的选择器
       let actualSelector = selector;
-      let locator;
+      let locator: Locator;
 
       switch (selectorType) {
         case 'id':

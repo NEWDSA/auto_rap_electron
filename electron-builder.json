@@ -1,35 +1,29 @@
 {
-  "appId": "com.autorap.app",
-  "productName": "AutoRAP",
+  "appId": "com.auto.rap",
+  "productName": "Auto Rap",
   "directories": {
     "output": "release"
   },
   "files": [
     "dist/**/*",
-    "dist-electron/**/*"
+    "dist-electron/**/*",
+    "package.json"
   ],
-  "extraMetadata": {
-    "main": "dist-electron/main.js"
-  },
-  "mac": {
-    "category": "public.app-category.developer-tools",
-    "target": ["dmg", "zip"]
-  },
+  "extraResources": [
+    {
+      "from": "build/chromium",
+      "to": "chromium",
+      "filter": ["**/*"]
+    }
+  ],
   "win": {
     "target": [
       {
         "target": "nsis",
         "arch": ["x64"]
-      },
-      {
-        "target": "portable",
-        "arch": ["x64"]
       }
-    ]
-  },
-  "linux": {
-    "target": ["AppImage", "deb"],
-    "category": "Development"
+    ],
+    "icon": "build/icon.ico"
   },
   "nsis": {
     "oneClick": false,

@@ -5,7 +5,8 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && electron-builder --config electron-builder.json",
+    "prebuild": "playwright install chromium && playwright install-deps chromium",
+    "build": "vite build && tsc -p electron/tsconfig.json && electron-builder --config electron-builder.json",
     "build:with-types": "vue-tsc && vite build && tsc -p electron/tsconfig.json && electron-builder --config electron-builder.json",
     "preview": "vite preview",
     "test:unit": "vitest",
@@ -60,6 +61,7 @@
     "electron-builder": "24.9.1",
     "eslint": "8.56.0",
     "eslint-plugin-vue": "9.19.2",
+    "fs-extra": "^11.3.0",
     "mock-aws-s3": "^4.0.2",
     "postcss": "^8.4.33",
     "postcss-nesting": "^13.0.1",

@@ -1,5 +1,8 @@
+import { IpcRendererEvent } from 'electron'
+
 export interface IElectronAPI {
   invoke(channel: string, ...args: any[]): Promise<any>
+  on(channel: string, callback: (event: IpcRendererEvent, message: any) => void): void
   
   // 数据库操作
   saveConfiguration: (name: string, content: string) => Promise<{
