@@ -919,6 +919,8 @@ const updateNodeName = () => {
 
 // 更新节点属性
 const handleNodePropertyChange = (key: string) => {
+  console.log(key,'...内容变更...')
+  console.log(selectedNode.value.properties,'..rrrr...')
   if (!lf.value || !selectedNode.value) return
   
   // 更新节点属性

@@ -387,17 +387,23 @@ ipcMain.handle('fs:writeFile', async (_, filePath, content, options = {}) => {
 // 添加打开浏览器处理程序
 ipcMain.handle('open-browser', async (_, options) => {
   try {
-    const browser = automationController.getCurrentBrowser()
+    // 使用 initBrowser 而不是 start
+    await automationController.initBrowser({
+      url: options.url,
+      width: options.width,
+      height: options.height,
+      headless: options.headless || false,
+      incognito: options.incognito,
+      userAgent: options.userAgent
+    });
     
-    // 如果正在选择元素，不允许打开新的浏览器
-    if (browser?.isConnected() && automationController.isElementPickerActive()) {
-      return { success: false, error: '正在选择元素，请稍后再试' }
-    }
-    
-    await automationController.initBrowser(options)
-    return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message }
+    return { success: true };
+  } catch (error) {
+    console.error('打开浏览器失败:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : String(error) 
+    };
   }
 })
 
@@ -639,6 +645,48 @@ ipcMain.handle('scheduler:get-task-log', async (_, taskId) => {
   } catch (error: any) {
     console.error('获取任务日志失败:', error)
     return { success: false, error: error.message }
+  }
+})
+
+// 处理获取统计数据的请求
+ipcMain.handle('get-stats', async () => {
+  try {
+    // 获取所有任务
+    const allTasks = taskScheduler.getAllTasks()
+    
+    // 计算统计数据
+    const totalProcesses = allTasks.length
+    const runningTasks = allTasks.filter(task => task.status === TaskStatus.RUNNING).length
+    
+    // 获取今日执行的任务数
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayExecutions = allTasks.filter(task => 
+      task.lastRunTime && new Date(task.lastRunTime) >= today
+    ).length
+    
+    // 计算成功率（这里简化处理，实际应该根据任务执行结果计算）
+    const completedTasks = allTasks.filter(task => 
+      task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED
+    )
+    const successRate = completedTasks.length > 0
+      ? Math.round((completedTasks.filter(task => task.status === TaskStatus.COMPLETED).length / completedTasks.length) * 100)
+      : 0
+    
+    return {
+      totalProcesses,
+      runningTasks,
+      todayExecutions,
+      successRate
+    }
+  } catch (error) {
+    console.error('获取统计数据失败:', error)
+    return {
+      totalProcesses: 0,
+      runningTasks: 0,
+      todayExecutions: 0,
+      successRate: 0
+    }
   }
 })
 

@@ -1,7 +1,7 @@
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4" @click.stop>
     <el-form-item label="操作类型">
-      <el-select v-model="node.properties.actionType" @change="handleChange">
+      <el-select v-model="localActionType" @change="handleActionTypeChange">
         <el-option label="打开网页" value="goto" />
         <el-option label="点击元素" value="click" />
         <el-option label="刷新页面" value="refresh" />
@@ -14,25 +14,25 @@
     </el-form-item>
 
     <el-form-item 
-      v-if="node.properties.actionType === 'goto'" 
+      v-if="localActionType === 'goto'" 
       label="网页地址"
     >
       <el-input 
-        v-model="node.properties.url"
+        v-model="localUrl"
         placeholder="请输入网页地址，例如: https://www.example.com"
-        @change="handleChange"
+        @change="handleUrlChange"
       />
     </el-form-item>
 
     <el-form-item 
-      v-if="node.properties.actionType === 'click'" 
+      v-if="localActionType === 'click'" 
       label="点击设置"
     >
       <div class="space-y-2">
         <el-input
           v-model="node.properties.clickSelector"
           placeholder="请选择要点击的元素"
-          @input="handleChange"
+          @input="handleChange('clickSelector')"
         >
           <template #append>
             <el-button @click="openBrowserForClick">选择元素</el-button>
@@ -42,7 +42,7 @@
         <div class="flex space-x-2">
           <el-checkbox
             v-model="node.properties.waitAfterClick"
-            @change="handleChange"
+            @change="handleChange('waitAfterClick')"
           >
             点击后等待加载
           </el-checkbox>
@@ -54,7 +54,7 @@
             :min="1"
             :max="60"
             placeholder="等待时间(秒)"
-            @change="handleChange"
+            @change="handleChange('clickTimeout')"
           />
         </div>
       </div>
@@ -62,20 +62,20 @@
 
     <el-form-item label="等待页面加载">
       <el-switch
-        v-model="node.properties.waitForLoad"
-        @change="handleChange"
+        v-model="localWaitForLoad"
+        @change="handleWaitForLoadChange"
       />
     </el-form-item>
 
     <el-form-item 
-      v-if="node.properties.waitForLoad"
+      v-if="localWaitForLoad"
       label="超时时间(秒)"
     >
       <el-input-number
         v-model="node.properties.timeout"
         :min="1"
         :max="60"
-        @change="handleChange"
+        @change="handleChange('timeout')"
       />
     </el-form-item>
 
@@ -85,13 +85,13 @@
           <el-button type="primary" @click="openBrowser">打开浏览器</el-button>
           <el-checkbox
             v-model="node.properties.headless"
-            @change="handleChange"
+            @change="handleChange('headless')"
           >
             无头模式
           </el-checkbox>
           <el-checkbox
             v-model="node.properties.incognito"
-            @change="handleChange"
+            @change="handleChange('incognito')"
           >
             隐身模式
           </el-checkbox>
@@ -106,7 +106,7 @@
           :min="800"
           :max="1920"
           placeholder="宽度"
-          @change="handleChange"
+          @change="handleChange('width')"
         />
         <span class="text-gray-500">x</span>
         <el-input-number
@@ -114,7 +114,7 @@
           :min="600"
           :max="1080"
           placeholder="高度"
-          @change="handleChange"
+          @change="handleChange('height')"
         />
       </div>
     </el-form-item>
@@ -123,14 +123,14 @@
       <el-input
         v-model="node.properties.userAgent"
         placeholder="自定义User-Agent"
-        @change="handleChange"
+        @change="handleChange('userAgent')"
       />
     </el-form-item>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import type { FlowNode } from '@/types/node-config'
 import { ipcRenderer } from '@/utils/electron'
 
@@ -142,8 +142,48 @@ const emit = defineEmits<{
   (e: 'update', key: string): void
 }>()
 
-const handleChange = () => {
-  emit('update', 'properties')
+// 添加本地状态
+const localWaitForLoad = ref(props.node.properties.waitForLoad)
+const localUrl = ref(props.node.properties.url || '')
+const localActionType = ref(props.node.properties.actionType || 'goto')
+
+// 监听属性变化
+watch(() => props.node.properties.waitForLoad, (newVal) => {
+  localWaitForLoad.value = newVal
+})
+
+watch(() => props.node.properties.url, (newVal) => {
+  localUrl.value = newVal || ''
+})
+
+watch(() => props.node.properties.actionType, (newVal) => {
+  localActionType.value = newVal || 'goto'
+})
+
+const handleChange = (propertyName?: string) => {
+  if (propertyName) {
+    // 只更新特定属性
+    emit('update', propertyName)
+  } else {
+    // 更新所有属性
+    emit('update', 'properties')
+  }
+}
+
+// 添加类型安全的事件处理函数
+const handleActionTypeChange = (val: string) => {
+  props.node.properties.actionType = val;
+  handleChange('actionType');
+}
+
+const handleUrlChange = (val: string) => {
+  props.node.properties.url = val;
+  handleChange('url');
+}
+
+const handleWaitForLoadChange = (val: boolean) => {
+  props.node.properties.waitForLoad = val;
+  handleChange('waitForLoad');
 }
 
 const openBrowserForClick = async () => {
@@ -155,13 +195,13 @@ const openBrowserForClick = async () => {
       headless: false,
       incognito: props.node.properties.incognito,
       userAgent: props.node.properties.userAgent
-    })
+    });
     
     // 等待元素选择
     const selector = await ipcRenderer.invoke('element:startPicker')
     if (selector) {
       props.node.properties.clickSelector = selector
-      handleChange()
+      handleChange('clickSelector')
     }
   } catch (error) {
     console.error('打开浏览器失败:', error)
@@ -174,10 +214,10 @@ const openBrowser = async () => {
       url: props.node.properties.url || 'about:blank',
       width: props.node.properties.width,
       height: props.node.properties.height,
-      headless: false,
+      headless: props.node.properties.headless || false,
       incognito: props.node.properties.incognito,
       userAgent: props.node.properties.userAgent
-    })
+    });
   } catch (error) {
     console.error('打开浏览器失败:', error)
   }
@@ -187,9 +227,11 @@ onMounted(() => {
   // 初始化默认值
   if (!props.node.properties.actionType) {
     props.node.properties.actionType = 'goto'
+    localActionType.value = 'goto'
   }
   if (!props.node.properties.waitForLoad) {
     props.node.properties.waitForLoad = true
+    localWaitForLoad.value = true
   }
   if (!props.node.properties.timeout) {
     props.node.properties.timeout = 30

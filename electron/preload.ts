@@ -41,7 +41,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'scheduler:delete-task',
       'scheduler:start-task',
       'scheduler:stop-task',
-      'scheduler:get-task-log'
+      'scheduler:get-task-log',
+      // 统计相关通道
+      'get-stats'
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

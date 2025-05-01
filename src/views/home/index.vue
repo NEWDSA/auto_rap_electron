@@ -53,40 +53,48 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { getStats } from '@/api/stats'
 
 const router = useRouter()
+const stats = ref({
+  totalProcesses: 0,
+  runningTasks: 0,
+  todayExecutions: 0,
+  successRate: 0
+})
 
 // 统计数据
-const statistics = [
+const statistics = computed(() => [
   {
     title: '流程总数',
-    value: '12',
+    value: stats.value.totalProcesses.toString(),
     icon: 'Files',
     color: 'text-blue-500',
     bgColor: 'bg-blue-50 dark:bg-blue-900/10'
   },
   {
     title: '运行中任务',
-    value: '3',
+    value: stats.value.runningTasks.toString(),
     icon: 'VideoPlay',
     color: 'text-green-500',
     bgColor: 'bg-green-50 dark:bg-green-900/10'
   },
   {
     title: '今日执行',
-    value: '128',
+    value: stats.value.todayExecutions.toString(),
     icon: 'DataLine',
     color: 'text-orange-500',
     bgColor: 'bg-orange-50 dark:bg-orange-900/10'
   },
   {
     title: '成功率',
-    value: '98%',
+    value: `${stats.value.successRate}%`,
     icon: 'CircleCheck',
     color: 'text-purple-500',
     bgColor: 'bg-purple-50 dark:bg-purple-900/10'
-  },
-]
+  }
+])
 
 // 快速入口
 const quickActions = [
@@ -105,6 +113,23 @@ const quickActions = [
     color: 'text-green-500',
   },
 ]
+
+// 获取统计数据
+const fetchStats = async () => {
+  try {
+    const data = await getStats()
+    stats.value = data
+  } catch (error) {
+    console.error('获取统计数据失败:', error)
+  }
+}
+
+// 组件挂载时获取数据
+onMounted(() => {
+  fetchStats()
+  // 每30秒刷新一次数据
+  setInterval(fetchStats, 30000)
+})
 </script>
 
 <style lang="postcss">
