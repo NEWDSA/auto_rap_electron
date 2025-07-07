@@ -103,6 +103,22 @@
       <div class="flex-1 flex flex-col designer-canvas">
         <div class="flex-1 relative" ref="container">
           <div ref="flowContainer" class="w-full h-full canvas-container"></div>
+          <!-- 拖拽时的高亮圆点覆盖层 -->
+          <div 
+            v-if="isDragging"
+            ref="dragOverlay"
+            class="absolute inset-0 pointer-events-none z-10"
+          >
+            <div
+              v-for="dot in highlightDots"
+              :key="dot.edgeId"
+              class="absolute w-3 h-3 bg-orange-500 rounded-full border-2 border-white shadow-lg transform -translate-x-1/2 -translate-y-1/2"
+              :style="{
+                left: dot.x + 'px',
+                top: dot.y + 'px'
+              }"
+            ></div>
+          </div>
         </div>
       </div>
 
@@ -223,6 +239,9 @@ const propertiesPanelCollapsed = ref(false)
 const isRunning = ref(false)
 const statusText = ref('')
 const showRecorder = ref(false)
+const isDragging = ref(false)
+const highlightDots = ref<Array<{x: number, y: number, edgeId: string}>>([])
+const dragOverlay = ref<HTMLElement | null>(null)
 
 // 流程执行器实例
 const flowExecutor = new FlowExecutor()
@@ -635,7 +654,7 @@ const initLogicFlow = async () => {
           const style = super.getEdgeStyle();
           return {
             ...style,
-            strokeWidth: this.strokeWidth,
+            strokeWidth: 2,
             stroke: '#666',
             strokeDasharray: '',
             hoverStroke: '#1890ff',
@@ -710,24 +729,43 @@ const handleDragStart = (event: DragEvent, node: NodeConfig) => {
   if (!event.dataTransfer) return
   console.log(node,'...handleDragStart...');
   event.dataTransfer.setData('application/json', JSON.stringify(node))
+  isDragging.value = true
 }
 
 const handleDragOver = (event: DragEvent) => {
   event.preventDefault()
+  
+  if (!isDragging.value || !flowContainer.value) return
+
+  const rect = flowContainer.value.getBoundingClientRect()
+  const offsetX = event.clientX - rect.left
+  const offsetY = event.clientY - rect.top
+
+  // 更新高亮圆点位置
+  updateHighlightDots(offsetX, offsetY)
 }
 
 const handleDrop = (event: DragEvent) => {
   event.preventDefault()
-  if (!event.dataTransfer || !lf.value) return
+  isDragging.value = false
+  highlightDots.value = []
+  
+  if (!event.dataTransfer || !lf.value) {
+    return
+  }
 
   const data = event.dataTransfer.getData('application/json')
-  if (!data) return
+  if (!data) {
+    return
+  }
 
   const node = JSON.parse(data)
   const { clientX, clientY } = event
   // 获取容器的位置信息
   const rect = flowContainer.value?.getBoundingClientRect()
-  if (!rect) return
+  if (!rect) {
+    return
+  }
 
   // 计算相对于容器的坐标
   const offsetX = clientX - rect.left
@@ -809,80 +847,22 @@ const handleDrop = (event: DragEvent) => {
     return
   }
 
-  // 检查是否在边上
+  // 检查是否在连接线上
   let targetEdge = null
-  for (const edge of edges) {
-    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId)
-    const targetNode = nodes.find(n => n.id === edge.targetNodeId)
-    if (!sourceNode || !targetNode) continue
+  const highlightedEdgeId = getHighlightedEdgeId(offsetX, offsetY)
+  if (highlightedEdgeId) {
+    targetEdge = edges.find(edge => edge.id === highlightedEdgeId) || null
+  }
 
-    // 改进判断点是否在贝塞尔曲线上的方法
-    // 贝塞尔曲线是根据起点、终点和控制点生成的
-    // 为了简化判断，我们使用矩形区域检测而不是精确的曲线检测
-    if (edge.type === 'bezier' && edge.pointsList) {
-      // 贝塞尔曲线有点列表，计算包围盒
-      const points = edge.pointsList
-      if (points && points.length > 0) {
-        // 获取所有点的最小和最大坐标来创建包围盒
-        let minX = Infinity, minY = Infinity
-        let maxX = -Infinity, maxY = -Infinity
-        
-        for (const point of points) {
-          minX = Math.min(minX, point.x)
-          minY = Math.min(minY, point.y)
-          maxX = Math.max(maxX, point.x)
-          maxY = Math.max(maxY, point.y)
-        }
-
-        // 扩大包围盒以增加点击区域
-        const padding = 15
-        minX -= padding
-        minY -= padding
-        maxX += padding
-        maxY += padding
-
-        // 检查点是否在包围盒内
-        if (offsetX >= minX && offsetX <= maxX && offsetY >= minY && offsetY <= maxY) {
-          // 找到最近的点
-          let minDistance = Infinity
-          for (let i = 0; i < points.length - 1; i++) {
-            const p1 = points[i]
-            const p2 = points[i + 1]
-            const distance = pointToLineDistance(
-              offsetX,
-              offsetY,
-              p1.x,
-              p1.y,
-              p2.x,
-              p2.y
-            )
-            if (distance < minDistance) {
-              minDistance = distance
-            }
-          }
-          
-          // 如果到最近线段的距离小于阈值，认为是点击在线上
-          if (minDistance < 20) {
-            targetEdge = edge
-            break
-          }
-        }
-      }
-    } else {
-      // 对于普通直线，使用原来的距离计算方法
-      const distance = pointToLineDistance(
-        offsetX,
-        offsetY,
-        sourceNode.x,
-        sourceNode.y,
-        targetNode.x,
-        targetNode.y
-      )
-
-      if (distance < 20) {
-        targetEdge = edge
-        break
-      }
+  // 如果在连接线上，将节点放在连接线的中点
+  if (targetEdge) {
+    const sourceNode = nodes.find(n => n.id === targetEdge.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === targetEdge.targetNodeId)
+    
+    if (sourceNode && targetNode) {
+      // 计算连接线的中点
+      nodeConfig.x = (sourceNode.x + targetNode.x) / 2
+      nodeConfig.y = (sourceNode.y + targetNode.y) / 2
     }
   }
 
@@ -910,6 +890,79 @@ const handleDrop = (event: DragEvent) => {
       properties: {}
     })
   }
+
+}
+
+// 更新高亮圆点位置
+const updateHighlightDots = (offsetX: number, offsetY: number) => {
+  if (!lf.value) return
+
+  const graphData = lf.value.getGraphData()
+  const nodes = graphData.nodes || []
+  const edges = graphData.edges || []
+  const dots: Array<{x: number, y: number, edgeId: string}> = []
+
+  for (const edge of edges) {
+    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === edge.targetNodeId)
+    if (!sourceNode || !targetNode) continue
+
+    // 计算点到连接线的距离
+    const distance = pointToLineDistance(
+      offsetX,
+      offsetY,
+      sourceNode.x,
+      sourceNode.y,
+      targetNode.x,
+      targetNode.y
+    )
+
+    // 如果距离小于25px，在连接线中点显示圆点
+    if (distance < 25) {
+      const dotX = (sourceNode.x + targetNode.x) / 2
+      const dotY = (sourceNode.y + targetNode.y) / 2
+      
+      dots.push({
+        x: dotX,
+        y: dotY,
+        edgeId: edge.id
+      })
+    }
+  }
+
+  highlightDots.value = dots
+}
+
+// 获取当前高亮的连接线ID
+const getHighlightedEdgeId = (offsetX: number, offsetY: number): string | null => {
+  if (!lf.value) return null
+
+  const graphData = lf.value.getGraphData()
+  const nodes = graphData.nodes || []
+  const edges = graphData.edges || []
+
+  for (const edge of edges) {
+    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId)
+    const targetNode = nodes.find(n => n.id === edge.targetNodeId)
+    if (!sourceNode || !targetNode) continue
+
+    // 计算点到连接线的距离
+    const distance = pointToLineDistance(
+      offsetX,
+      offsetY,
+      sourceNode.x,
+      sourceNode.y,
+      targetNode.x,
+      targetNode.y
+    )
+
+    // 如果距离小于25px，认为鼠标在连接线上
+    if (distance < 25) {
+      return edge.id
+    }
+  }
+
+  return null
 }
 
 // 计算点到线段的距离
@@ -1076,6 +1129,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  // 清理状态
+  isDragging.value = false
+  highlightDots.value = []
+  
   if (lf.value) {
     // lf.value.destroy();
   }
