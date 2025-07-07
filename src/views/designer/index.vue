@@ -387,7 +387,7 @@ const initializeFlow = () => {
     // 创建开始节点
     const startNode = lf.value.addNode({
       type: 'start',
-      x: 200,
+      x: 400,
       y: 200,
       text: '开始流程',
       properties: {
@@ -399,8 +399,8 @@ const initializeFlow = () => {
     // 创建结束节点
     const endNode = lf.value.addNode({
       type: 'end',
-      x: 600,
-      y: 200,
+      x: 400,
+      y: 400,
       text: '结束流程',
       properties: {
         nodeType: 'end'
@@ -748,9 +748,9 @@ const handleDrop = (event: DragEvent) => {
     // 获取当前循环节点的子节点数量
     const childCount = nodes.filter(n => n.properties.parentId === targetNode.id).length
 
-    // 调整新节点的位置
-    nodeConfig.x = targetNode.x
-    nodeConfig.y = targetNode.y + 80 + childCount * 60
+    // 调整新节点的位置 - 竖向排列
+    nodeConfig.x = 400 // 固定X坐标
+    nodeConfig.y = targetNode.y + 100 + childCount * 150 // 进一步增大间距
 
     // 添加新节点
     const newNode = lf.value.addNode(nodeConfig)
