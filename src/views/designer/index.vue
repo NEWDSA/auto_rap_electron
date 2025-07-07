@@ -357,6 +357,11 @@ class CustomNodeModel extends RectNodeModel {
       textBaseline: 'middle'
     };
   }
+
+  // 禁用节点拖拽
+  isAllowMove() {
+    return false;
+  }
 }
 
 class CustomNode extends RectNode {
@@ -451,6 +456,11 @@ const registerNodes = () => {
             strokeWidth: 2
           };
         }
+
+        // 禁用节点拖拽
+        isAllowMove() {
+          return false;
+        }
       }
     });
 
@@ -474,6 +484,11 @@ const registerNodes = () => {
             stroke: '#f56c6c',
             strokeWidth: 2
           };
+        }
+
+        // 禁用节点拖拽
+        isAllowMove() {
+          return false;
         }
       }
     });
@@ -526,6 +541,11 @@ const registerNodes = () => {
                 strokeWidth: 2
               };
             }
+
+            // 禁用节点拖拽
+            isAllowMove() {
+              return false;
+            }
           }
         });
         console.log(`注册节点完成: ${node.type}`);
@@ -556,8 +576,12 @@ const initLogicFlow = async () => {
       edgeTextEdit: false,
       nodeTextDraggable: false,
       edgeTextDraggable: false,
-      adjustNodePosition: true,
+      adjustNodePosition: false,
       snapline: true,
+      allowMoveNode: false,
+      allowMoveEdge: false,
+      allowReconnect: false,
+      allowAppendTo: false,
       style: {
         rect: {
           radius: 5,
@@ -588,7 +612,9 @@ const initLogicFlow = async () => {
           outlineStroke: 3,
           edgeAnimation: true,
           adjustLineDistance: true,
-          draginLimit: false
+          draginLimit: true,
+          allowReconnect: false,
+          allowAppendTo: false
         }
       }
     });
@@ -622,6 +648,23 @@ const initLogicFlow = async () => {
           if (properties.strokeWidth !== undefined) {
             this.strokeWidth = properties.strokeWidth;
           }
+        }
+
+        // 禁用边的拖拽和修改
+        isAllowMoveEdge() {
+          return false;
+        }
+
+        isAllowAppendTo() {
+          return false;
+        }
+
+        isAllowConnected() {
+          return false;
+        }
+
+        isAllowMove() {
+          return false;
         }
 
         updateStartPoint(point: { x: number; y: number }) {
