@@ -307,6 +307,7 @@ const registerEvents = () => {
   lf.value.on('history:change', (data: { undoAble: boolean, redoAble: boolean }) => {
     canUndo.value = data.undoAble
     canRedo.value = data.redoAble
+    ensureInitialFlow(true)
   })
 
   // 添加节点右键菜单事件
@@ -432,15 +433,16 @@ const initializeFlow = () => {
     });
     console.log('创建结束节点:', endNode);
 
-    // 连接开始和结束节点
-    if (startNode && endNode) {
-      const edge = lf.value.addEdge({
-        type: 'bezier',
-        sourceNodeId: startNode.id,
-        targetNodeId: endNode.id,
-        properties: {}
-      });
-      console.log('创建连接:', edge);
+    // 创建连接线
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: startNode.id,
+      targetNodeId: endNode.id,
+      properties: {}
+    });
+    // 清空撤销栈，保证三项不会被撤销
+    if (lf.value && lf.value.history && typeof lf.value.history.clear === 'function') {
+      lf.value.history.clear();
     }
   } catch (error) {
     console.error('初始化流程失败:', error);
@@ -1034,12 +1036,59 @@ const handleNodePropertyChange = (key: string) => {
 const handleUndo = () => {
   if (!lf.value) return
   lf.value.undo()
+  ensureInitialFlow()
 }
 
 // 重做
 const handleRedo = () => {
   if (!lf.value) return
   lf.value.redo()
+  ensureInitialFlow()
+}
+
+// 保证画布上始终有开始节点、结束节点和它们之间的连接线
+const ensureInitialFlow = (noHistory = false) => {
+  if (!lf.value) return
+  const graphData = lf.value.getGraphData()
+  let nodes = graphData.nodes || []
+  let edges = graphData.edges || []
+
+  // 查找开始节点和结束节点
+  let startNode = nodes.find((n: any) => n.type === 'start')
+  let endNode = nodes.find((n: any) => n.type === 'end')
+
+  // 添加节点时不进历史
+  if (!startNode) {
+    startNode = lf.value.addNode({
+      type: 'start',
+      x: 400,
+      y: 200,
+      text: '开始流程',
+      properties: { nodeType: 'start' }
+    })
+    if (noHistory && lf.value.history) lf.value.history.undoStack && lf.value.history.undoStack.pop();
+  }
+  if (!endNode) {
+    endNode = lf.value.addNode({
+      type: 'end',
+      x: 400,
+      y: 400,
+      text: '结束流程',
+      properties: { nodeType: 'end' }
+    })
+    if (noHistory && lf.value.history) lf.value.history.undoStack && lf.value.history.undoStack.pop();
+  }
+
+  const hasEdge = edges.some((e: any) => e.sourceNodeId === startNode.id && e.targetNodeId === endNode.id)
+  if (!hasEdge) {
+    lf.value.addEdge({
+      type: 'bezier',
+      sourceNodeId: startNode.id,
+      targetNodeId: endNode.id,
+      properties: {}
+    })
+    if (noHistory && lf.value.history) lf.value.history.undoStack && lf.value.history.undoStack.pop();
+  }
 }
 
 // 保存流程
@@ -1247,6 +1296,29 @@ const loadFlowFromDatabase = async (id: number) => {
     statusText.value = '加载流程失败'
     ElMessage.error(`加载流程失败: ${error.message}`)
   }
+}
+
+// 拦截批量删除和快捷键删除
+if (lf.value) {
+  lf.value.on('delete:node', (data: { nodes: any[] }) => {
+    // 过滤掉开始、结束节点
+    data.nodes = data.nodes.filter(n => n.type !== 'start' && n.type !== 'end')
+    if (data.nodes.length === 0) {
+      ElMessage.warning('开始和结束节点不能删除')
+    }
+  })
+  lf.value.on('delete:edge', (data: { edges: any[] }) => {
+    // 获取节点信息
+    const graphData = lf.value.getGraphData()
+    const nodes = graphData.nodes || []
+    const startNode = nodes.find((n: any) => n.type === 'start')
+    const endNode = nodes.find((n: any) => n.type === 'end')
+    // 过滤掉开始-结束连接线
+    data.edges = data.edges.filter(e => !(startNode && endNode && e.sourceNodeId === startNode.id && e.targetNodeId === endNode.id))
+    if (data.edges.length === 0) {
+      ElMessage.warning('开始节点和结束节点之间的连接线不能删除')
+    }
+  })
 }
 </script>
 
