@@ -242,6 +242,7 @@ const showRecorder = ref(false)
 const isDragging = ref(false)
 const highlightDots = ref<Array<{x: number, y: number, edgeId: string}>>([])
 const dragOverlay = ref<HTMLElement | null>(null)
+const customNodeCount = ref(0)
 
 // 流程执行器实例
 const flowExecutor = new FlowExecutor()
@@ -310,30 +311,23 @@ const registerEvents = () => {
     ensureInitialFlow(true)
   })
 
-  // 添加节点右键菜单事件
-  lf.value.on('node:contextmenu', (data: { data: FlowNode, e: MouseEvent }) => {
-    // 阻止默认右键菜单
+  // 删除节点时保护（右键菜单删除）
+  lf.value.on('node:contextmenu', (data) => {
     data.e.preventDefault()
-    
-    // 如果是开始或结束节点，不允许删除
-    if (data.data.type === 'start' || data.data.type === 'end') {
-      ElMessage.warning('开始和结束节点不能删除')
+    if (data.data.type === 'start' || data.data.type === 'end' || customNodeCount.value === 0) {
+      ElMessage.warning('不能删除关键节点或主链连线')
       return
     }
-
-    // 显示确认对话框
     ElMessageBox.confirm('确定要删除该节点吗？', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }).then(() => {
-      // 删除节点
       lf.value?.deleteNode(data.data.id)
+      customNodeCount.value--
       selectedNode.value = null
       ElMessage.success('节点已删除')
-    }).catch(() => {
-      // 取消删除
-    })
+    }).catch(() => {})
   })
 }
 
@@ -761,7 +755,7 @@ const handleDrop = (event: DragEvent) => {
     return
   }
 
-  const node = JSON.parse(data)
+  const dragNode = JSON.parse(data)
   const { clientX, clientY } = event
   // 获取容器的位置信息
   const rect = flowContainer.value?.getBoundingClientRect()
@@ -802,16 +796,16 @@ const handleDrop = (event: DragEvent) => {
 
   // 创建节点数据
   const nodeConfig = {
-    type: node.type,
+    type: dragNode.type,
     x: offsetX,
     y: offsetY,
-    text: node.name || '',
+    text: dragNode.name || '',
     properties: {
-      name: node.name,
-      nodeType: node.type,
+      name: dragNode.name,
+      nodeType: dragNode.type,
       parentId: undefined,
       // 浏览器节点的默认属性
-      ...(node.type === 'browser' ? {
+      ...(dragNode.type === 'browser' ? {
         actionType: 'goto',
         waitForLoad: true,
         timeout: 30,
@@ -870,6 +864,9 @@ const handleDrop = (event: DragEvent) => {
 
   // 添加节点
   const newNode = lf.value.addNode(nodeConfig)
+  if (nodeConfig.type !== 'start' && nodeConfig.type !== 'end') {
+    customNodeCount.value++
+  }
 
   // 如果在边上，创建新的连接
   if (targetEdge) {
@@ -1035,8 +1032,16 @@ const handleNodePropertyChange = (key: string) => {
 // 撤销
 const handleUndo = () => {
   if (!lf.value) return
-  lf.value.undo()
-  ensureInitialFlow()
+  if (customNodeCount.value > 0) {
+    const graphData = lf.value.getGraphData()
+    const nodes = graphData.nodes || []
+    const lastCustomNode = [...nodes].reverse().find(n => n.type !== 'start' && n.type !== 'end')
+    if (lastCustomNode) {
+      lf.value.deleteNode(lastCustomNode.id)
+      customNodeCount.value--
+    }
+  }
+  // customNodeCount为0时，不做任何操作
 }
 
 // 重做
@@ -1301,10 +1306,18 @@ const loadFlowFromDatabase = async (id: number) => {
 // 拦截批量删除和快捷键删除
 if (lf.value) {
   lf.value.on('delete:node', (data: { nodes: any[] }) => {
-    // 过滤掉开始、结束节点
+    // 过滤掉开始、结束节点，且customNodeCount>0时才允许删除
+    if (customNodeCount.value === 0) {
+      data.nodes = []
+      ElMessage.warning('不能删除关键节点或主链连线')
+      return
+    }
     data.nodes = data.nodes.filter(n => n.type !== 'start' && n.type !== 'end')
+    if (data.nodes.length > 0) {
+      customNodeCount.value -= data.nodes.length
+    }
     if (data.nodes.length === 0) {
-      ElMessage.warning('开始和结束节点不能删除')
+      ElMessage.warning('没有可删除的自定义节点')
     }
   })
   lf.value.on('delete:edge', (data: { edges: any[] }) => {
