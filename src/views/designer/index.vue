@@ -850,15 +850,23 @@ const handleDrop = (event: DragEvent) => {
     targetEdge = edges.find(edge => edge.id === highlightedEdgeId) || null
   }
 
-  // 如果在连接线上，将节点放在连接线的中点
+  // 如果在连接线上，将节点放在鼠标位置的投影点
   if (targetEdge) {
     const sourceNode = nodes.find(n => n.id === targetEdge.sourceNodeId)
     const targetNode = nodes.find(n => n.id === targetEdge.targetNodeId)
     
     if (sourceNode && targetNode) {
-      // 计算连接线的中点
-      nodeConfig.x = (sourceNode.x + targetNode.x) / 2
-      nodeConfig.y = (sourceNode.y + targetNode.y) / 2
+      // 计算鼠标在连接线上的投影点
+      const projectionPoint = getProjectionPointOnLine(
+        offsetX,
+        offsetY,
+        sourceNode.x,
+        sourceNode.y,
+        targetNode.x,
+        targetNode.y
+      )
+      nodeConfig.x = projectionPoint.x
+      nodeConfig.y = projectionPoint.y
     }
   }
 
@@ -892,6 +900,37 @@ const handleDrop = (event: DragEvent) => {
 
 }
 
+// 计算鼠标在连接线上的投影点
+const getProjectionPointOnLine = (
+  mouseX: number,
+  mouseY: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+) => {
+  const A = mouseX - x1
+  const B = mouseY - y1
+  const C = x2 - x1
+  const D = y2 - y1
+
+  const dot = A * C + B * D
+  const lenSq = C * C + D * D
+  let param = -1
+
+  if (lenSq !== 0) {
+    param = dot / lenSq
+  }
+
+  // 限制投影点在线段范围内
+  param = Math.max(0, Math.min(1, param))
+  
+  const projX = x1 + param * C
+  const projY = y1 + param * D
+  
+  return { x: projX, y: projY }
+}
+
 // 更新高亮圆点位置
 const updateHighlightDots = (offsetX: number, offsetY: number) => {
   if (!lf.value) return
@@ -916,14 +955,20 @@ const updateHighlightDots = (offsetX: number, offsetY: number) => {
       targetNode.y
     )
 
-    // 如果距离小于25px，在连接线中点显示圆点
+    // 如果距离小于25px，在鼠标位置的投影点显示圆点
     if (distance < 25) {
-      const dotX = (sourceNode.x + targetNode.x) / 2
-      const dotY = (sourceNode.y + targetNode.y) / 2
+      const projectionPoint = getProjectionPointOnLine(
+        offsetX,
+        offsetY,
+        sourceNode.x,
+        sourceNode.y,
+        targetNode.x,
+        targetNode.y
+      )
       
       dots.push({
-        x: dotX,
-        y: dotY,
+        x: projectionPoint.x,
+        y: projectionPoint.y,
         edgeId: edge.id
       })
     }
