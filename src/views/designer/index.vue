@@ -712,7 +712,8 @@ const initLogicFlow = async () => {
     await nextTick();
     lf.value.render();
 
-    // 所有节点都由用户手动拖拽添加，不自动创建任何节点
+    // 初始化时创建开始和结束节点
+    ensureInitialFlow()
   } catch (error) {
     console.error('初始化 LogicFlow 失败:', error);
   }
@@ -866,7 +867,102 @@ const handleDrop = (event: DragEvent) => {
   if (nodeConfig.type !== 'start' && nodeConfig.type !== 'end') {
     customNodeCount.value++
   }
-  // 不再自动创建连接线，用户需要手动连接
+  
+  // 自动延伸连接线：将新节点插入到开始和结束节点之间
+  // 重新获取最新的图数据
+  const latestGraphData = lf.value.getGraphData()
+  const latestNodes = latestGraphData.nodes || []
+  const latestEdges = latestGraphData.edges || []
+  const startNode2 = latestNodes.find((n: any) => n.type === 'start')
+  const endNode2 = latestNodes.find((n: any) => n.type === 'end')
+  
+  if (startNode2 && endNode2 && newNode.id !== startNode2.id && newNode.id !== endNode2.id) {
+    // 计算中间节点的数量（不包括开始、结束和新添加的节点）
+    const middleNodes = latestNodes.filter((n: any) => 
+      n.type !== 'start' && 
+      n.type !== 'end' && 
+      n.id !== newNode.id
+    )
+    
+    // 根据节点数量自动调整位置
+    const nodeSpacing = 100 // 节点之间的间距
+    const startY = startNode2.y
+    
+    // 将新节点放置在合适的位置
+    const newNodeY = startY + (middleNodes.length + 1) * nodeSpacing
+    // 更新节点模型的位置（包括文本）
+    const nodeModel = lf.value.getNodeModelById(newNode.id)
+    if (nodeModel) {
+      nodeModel.x = startNode2.x
+      nodeModel.y = newNodeY
+      // 更新文本位置
+      if (nodeModel.text) {
+        nodeModel.text.x = startNode2.x
+        nodeModel.text.y = newNodeY
+      }
+    }
+    
+    // 移动结束节点到更下方
+    const endNodeY = startY + (middleNodes.length + 2) * nodeSpacing
+    const endNodeModel = lf.value.getNodeModelById(endNode2.id)
+    if (endNodeModel) {
+      endNodeModel.x = startNode2.x
+      endNodeModel.y = endNodeY
+      // 更新文本位置
+      if (endNodeModel.text) {
+        endNodeModel.text.x = startNode2.x
+        endNodeModel.text.y = endNodeY
+      }
+    }
+    
+    // 查找开始到结束的直接连接
+    const directEdge = latestEdges.find((e: any) => 
+      e.sourceNodeId === startNode2.id && e.targetNodeId === endNode2.id
+    )
+    
+    if (directEdge) {
+      // 删除直接连接
+      lf.value.deleteEdge(directEdge.id)
+      
+      // 创建新的连接：start -> newNode -> end
+      lf.value.addEdge({
+        type: 'polyline',
+        sourceNodeId: startNode2.id,
+        targetNodeId: newNode.id,
+        properties: {}
+      })
+      
+      lf.value.addEdge({
+        type: 'polyline',
+        sourceNodeId: newNode.id,
+        targetNodeId: endNode2.id,
+        properties: {}
+      })
+    } else {
+      // 如果没有直接连接，找到链的末端并连接
+      const toEndEdges = latestEdges.filter((e: any) => e.targetNodeId === endNode2.id)
+      if (toEndEdges.length > 0) {
+        // 删除原来到结束节点的边
+        lf.value.deleteEdge(toEndEdges[0].id)
+        const lastNodeId = toEndEdges[0].sourceNodeId
+        
+        // 连接 lastNode -> newNode -> end
+        lf.value.addEdge({
+          type: 'polyline',
+          sourceNodeId: lastNodeId,
+          targetNodeId: newNode.id,
+          properties: {}
+        })
+        
+        lf.value.addEdge({
+          type: 'polyline',
+          sourceNodeId: newNode.id,
+          targetNodeId: endNode2.id,
+          properties: {}
+        })
+      }
+    }
+  }
 
 }
 
@@ -1066,10 +1162,89 @@ const handleRedo = () => {
   // 不再自动确保初始流程节点
 }
 
-// 此函数不再需要，因为不会自动添加开始和结束节点
-// const ensureInitialFlow = (noHistory = false) => {
-//   // 已废弃：用户需要手动添加所有节点
-// }
+// 检查两个节点之间是否有路径
+const checkPath = (startId: string, endId: string, edges: any[]): boolean => {
+  const visited = new Set<string>()
+  const queue = [startId]
+  
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    
+    if (currentId === endId) {
+      return true
+    }
+    
+    if (visited.has(currentId)) {
+      continue
+    }
+    
+    visited.add(currentId)
+    
+    // 找到所有从当前节点出发的边
+    const outgoingEdges = edges.filter((e: any) => e.sourceNodeId === currentId)
+    for (const edge of outgoingEdges) {
+      if (!visited.has(edge.targetNodeId)) {
+        queue.push(edge.targetNodeId)
+      }
+    }
+  }
+  
+  return false
+}
+
+// 保证画布上始终有开始节点、结束节点和它们之间的连接线
+const ensureInitialFlow = () => {
+  if (!lf.value) return
+  const graphData = lf.value.getGraphData()
+  let nodes = graphData.nodes || []
+  let edges = graphData.edges || []
+
+  // 查找开始节点和结束节点
+  let startNode = nodes.find((n: any) => n.type === 'start')
+  let endNode = nodes.find((n: any) => n.type === 'end')
+
+  // 如果没有开始节点，添加一个
+  if (!startNode) {
+    startNode = lf.value.addNode({
+      type: 'start',
+      x: 400,
+      y: 150,
+      text: '开始',
+      properties: { 
+        nodeType: 'start',
+        name: '开始'
+      }
+    })
+  }
+  
+  // 如果没有结束节点，添加一个
+  if (!endNode) {
+    endNode = lf.value.addNode({
+      type: 'end',
+      x: 400,
+      y: 250,
+      text: '结束',
+      properties: { 
+        nodeType: 'end',
+        name: '结束'
+      }
+    })
+  }
+
+  // 确保开始和结束节点之间有连接线
+  const hasDirectEdge = edges.some((e: any) => 
+    e.sourceNodeId === startNode.id && e.targetNodeId === endNode.id
+  )
+  
+  if (!hasDirectEdge && startNode && endNode) {
+    lf.value.addEdge({
+      type: 'polyline',
+      sourceNodeId: startNode.id,
+      targetNodeId: endNode.id,
+      properties: {}
+    })
+  }
+}
 
 // 保存流程
 const handleSave = async () => {
@@ -1291,7 +1466,28 @@ if (lf.value) {
     }
   })
   lf.value.on('delete:edge', (data: { edges: any[] }) => {
-    // 允许删除所有连接线，不再保护开始-结束节点之间的连接线
+    // 允许删除连接线，但删除后检查是否需要重新连接开始和结束节点
+    setTimeout(() => {
+      if (!lf.value) return
+      const graphData = lf.value.getGraphData()
+      const nodes = graphData.nodes || []
+      const edges = graphData.edges || []
+      const startNode = nodes.find((n: any) => n.type === 'start')
+      const endNode = nodes.find((n: any) => n.type === 'end')
+      
+      // 如果开始和结束节点都存在，但它们之间没有任何路径，则添加直接连接
+      if (startNode && endNode) {
+        const hasPath = checkPath(startNode.id, endNode.id, edges)
+        if (!hasPath) {
+          lf.value.addEdge({
+            type: 'polyline',
+            sourceNodeId: startNode.id,
+            targetNodeId: endNode.id,
+            properties: {}
+          })
+        }
+      }
+    }, 100)
   })
 }
 </script>
