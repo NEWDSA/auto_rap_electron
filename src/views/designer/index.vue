@@ -177,8 +177,8 @@ import LogicFlow, {
   RectNodeModel,
   CircleNode,
   CircleNodeModel,
-  BezierEdge,
-  BezierEdgeModel
+  PolylineEdge,
+  PolylineEdgeModel
 } from '@logicflow/core'
 import { DndPanel, MiniMap, Control, SelectionSelect } from '@logicflow/extension'
 import '@logicflow/core/dist/style/index.css'
@@ -308,14 +308,14 @@ const registerEvents = () => {
   lf.value.on('history:change', (data: { undoAble: boolean, redoAble: boolean }) => {
     canUndo.value = data.undoAble
     canRedo.value = data.redoAble
-    ensureInitialFlow(true)
+    // 不再自动确保初始流程节点
   })
 
   // 删除节点时保护（右键菜单删除）
   lf.value.on('node:contextmenu', (data) => {
     data.e.preventDefault()
-    if (data.data.type === 'start' || data.data.type === 'end' || customNodeCount.value === 0) {
-      ElMessage.warning('不能删除关键节点或主链连线')
+    if (data.data.type === 'start' || data.data.type === 'end') {
+      ElMessage.warning('不能删除开始或结束节点')
       return
     }
     ElMessageBox.confirm('确定要删除该节点吗？', '提示', {
@@ -372,9 +372,9 @@ class CustomNodeModel extends RectNodeModel {
     };
   }
 
-  // 禁用节点拖拽
+  // 允许节点拖拽
   isAllowMove() {
-    return false;
+    return true;
   }
 }
 
@@ -396,52 +396,8 @@ class CustomNode extends RectNode {
   }
 }
 
-// 初始化流程
-const initializeFlow = () => {
-  if (!lf.value) return;
-
-  try {
-    console.log('开始初始化流程...');
-    
-    // 创建开始节点
-    const startNode = lf.value.addNode({
-      type: 'start',
-      x: 400,
-      y: 200,
-      text: '开始流程',
-      properties: {
-        nodeType: 'start'
-      }
-    });
-    console.log('创建开始节点:', startNode);
-
-    // 创建结束节点
-    const endNode = lf.value.addNode({
-      type: 'end',
-      x: 400,
-      y: 400,
-      text: '结束流程',
-      properties: {
-        nodeType: 'end'
-      }
-    });
-    console.log('创建结束节点:', endNode);
-
-    // 创建连接线
-    lf.value.addEdge({
-      type: 'bezier',
-      sourceNodeId: startNode.id,
-      targetNodeId: endNode.id,
-      properties: {}
-    });
-    // 清空撤销栈，保证三项不会被撤销
-    if (lf.value && lf.value.history && typeof lf.value.history.clear === 'function') {
-      lf.value.history.clear();
-    }
-  } catch (error) {
-    console.error('初始化流程失败:', error);
-  }
-};
+// 初始化流程 - 已移除自动创建节点逻辑
+// 现在所有节点都需要用户手动拖拽添加
 
 // 注册节点
 const registerNodes = () => {
@@ -472,9 +428,9 @@ const registerNodes = () => {
           };
         }
 
-        // 禁用节点拖拽
+        // 允许节点拖拽
         isAllowMove() {
-          return false;
+          return true;
         }
       }
     });
@@ -501,9 +457,9 @@ const registerNodes = () => {
           };
         }
 
-        // 禁用节点拖拽
+        // 允许节点拖拽
         isAllowMove() {
-          return false;
+          return true;
         }
       }
     });
@@ -557,9 +513,9 @@ const registerNodes = () => {
               };
             }
 
-            // 禁用节点拖拽
+            // 允许节点拖拽
             isAllowMove() {
-              return false;
+              return true;
             }
           }
         });
@@ -593,10 +549,16 @@ const initLogicFlow = async () => {
       edgeTextDraggable: false,
       adjustNodePosition: false,
       snapline: true,
-      allowMoveNode: false,
-      allowMoveEdge: false,
-      allowReconnect: false,
-      allowAppendTo: false,
+      allowMoveNode: true,
+      allowMoveEdge: true,
+      allowReconnect: true,
+      allowAppendTo: true,
+      edgeType: 'polyline', // 使用折线边，更适合垂直布局
+      overlapMode: 1, // 边的重叠模式
+      keyboard: {
+        enabled: true
+      },
+      adjustEdge: true, // 允许调整边
       style: {
         rect: {
           radius: 5,
@@ -618,7 +580,7 @@ const initLogicFlow = async () => {
           }
         },
         edge: {
-          type: 'bezier',
+          type: 'polyline',
           stroke: '#666',
           strokeWidth: 2,
           hoverStroke: '#1890ff',
@@ -628,19 +590,19 @@ const initLogicFlow = async () => {
           edgeAnimation: true,
           adjustLineDistance: true,
           draginLimit: true,
-          allowReconnect: false,
-          allowAppendTo: false
+          allowReconnect: true,
+          allowAppendTo: true
         }
       }
     });
 
     lf.value = logicFlow;
 
-    // 注册边的类型
+    // 注册折线边类型，适合垂直布局
     lf.value.register({
-      type: 'bezier',
-      view: BezierEdge,
-      model: class CustomBezierEdgeModel extends BezierEdgeModel {
+      type: 'polyline',
+      view: PolylineEdge,
+      model: class CustomPolylineEdgeModel extends PolylineEdgeModel {
         initEdgeData(data: any) {
           super.initEdgeData(data);
           this.strokeWidth = 2;
@@ -657,6 +619,25 @@ const initLogicFlow = async () => {
             selectedStroke: '#1890ff'
           };
         }
+        
+        // 配置垂直布局的折线点
+        getEdgePointPath() {
+          const { startPoint, endPoint } = this;
+          const points = [];
+          
+          // 起点
+          points.push(`${startPoint.x},${startPoint.y}`);
+          
+          // 中间点 - 垂直布局
+          const midY = (startPoint.y + endPoint.y) / 2;
+          points.push(`${startPoint.x},${midY}`);
+          points.push(`${endPoint.x},${midY}`);
+          
+          // 终点
+          points.push(`${endPoint.x},${endPoint.y}`);
+          
+          return points;
+        }
 
         setProperties(properties: any) {
           super.setProperties(properties);
@@ -665,21 +646,26 @@ const initLogicFlow = async () => {
           }
         }
 
-        // 禁用边的拖拽和修改
+        // 启用边的拖拽和修改
         isAllowMoveEdge() {
-          return false;
+          return true;
+        }
+        
+        // 允许调整边的锦点
+        isAllowAdjustStartAndEnd() {
+          return true;
         }
 
         isAllowAppendTo() {
-          return false;
+          return true;
         }
 
         isAllowConnected() {
-          return false;
+          return true;
         }
 
         isAllowMove() {
-          return false;
+          return true;
         }
 
         updateStartPoint(point: { x: number; y: number }) {
@@ -696,6 +682,19 @@ const initLogicFlow = async () => {
 
     // 注册节点
     registerNodes();
+    
+    // 设置默认边类型为 polyline
+    lf.value.setDefaultEdgeType('polyline');
+    
+    // 启用手动连接模式
+    // 允许从节点的锦点拖拽出连接线
+    lf.value.on('anchor:dragstart', ({ data, nodeModel }) => {
+      console.log('开始拖拽连接线', data);
+    });
+    
+    lf.value.on('anchor:drop', ({ data, nodeModel }) => {
+      console.log('放下连接线', data);
+    });
 
     // 事件监听
     registerEvents();
@@ -713,8 +712,7 @@ const initLogicFlow = async () => {
     await nextTick();
     lf.value.render();
 
-    // 初始化开始和结束节点
-    initializeFlow();
+    // 所有节点都由用户手动拖拽添加，不自动创建任何节点
   } catch (error) {
     console.error('初始化 LogicFlow 失败:', error);
   }
@@ -831,14 +829,7 @@ const handleDrop = (event: DragEvent) => {
 
     // 添加新节点
     const newNode = lf.value.addNode(nodeConfig)
-
-    // 创建连接
-    lf.value.addEdge({
-      type: 'bezier',
-      sourceNodeId: targetNode.id,
-      targetNodeId: newNode.id,
-      properties: {}
-    })
+    // 不再自动创建连接，用户需要手动连接
 
     return
   }
@@ -875,28 +866,7 @@ const handleDrop = (event: DragEvent) => {
   if (nodeConfig.type !== 'start' && nodeConfig.type !== 'end') {
     customNodeCount.value++
   }
-
-  // 如果在边上，创建新的连接
-  if (targetEdge) {
-    // 删除原来的边
-    lf.value.deleteEdge(targetEdge.id)
-
-    // 创建新的边 (源节点到新节点)
-    lf.value.addEdge({
-      type: 'bezier',
-      sourceNodeId: targetEdge.sourceNodeId,
-      targetNodeId: newNode.id,
-      properties: {}
-    })
-
-    // 创建新的边 (新节点到目标节点)
-    lf.value.addEdge({
-      type: 'bezier',
-      sourceNodeId: newNode.id,
-      targetNodeId: targetEdge.targetNodeId,
-      properties: {}
-    })
-  }
+  // 不再自动创建连接线，用户需要手动连接
 
 }
 
@@ -1093,53 +1063,13 @@ const handleUndo = () => {
 const handleRedo = () => {
   if (!lf.value) return
   lf.value.redo()
-  ensureInitialFlow()
+  // 不再自动确保初始流程节点
 }
 
-// 保证画布上始终有开始节点、结束节点和它们之间的连接线
-const ensureInitialFlow = (noHistory = false) => {
-  if (!lf.value) return
-  const graphData = lf.value.getGraphData()
-  let nodes = graphData.nodes || []
-  let edges = graphData.edges || []
-
-  // 查找开始节点和结束节点
-  let startNode = nodes.find((n: any) => n.type === 'start')
-  let endNode = nodes.find((n: any) => n.type === 'end')
-
-  // 添加节点时不进历史
-  if (!startNode) {
-    startNode = lf.value.addNode({
-      type: 'start',
-      x: 400,
-      y: 200,
-      text: '开始流程',
-      properties: { nodeType: 'start' }
-    })
-    if (noHistory && lf.value.history) lf.value.history.undoStack && lf.value.history.undoStack.pop();
-  }
-  if (!endNode) {
-    endNode = lf.value.addNode({
-      type: 'end',
-      x: 400,
-      y: 400,
-      text: '结束流程',
-      properties: { nodeType: 'end' }
-    })
-    if (noHistory && lf.value.history) lf.value.history.undoStack && lf.value.history.undoStack.pop();
-  }
-
-  const hasEdge = edges.some((e: any) => e.sourceNodeId === startNode.id && e.targetNodeId === endNode.id)
-  if (!hasEdge) {
-    lf.value.addEdge({
-      type: 'bezier',
-      sourceNodeId: startNode.id,
-      targetNodeId: endNode.id,
-      properties: {}
-    })
-    if (noHistory && lf.value.history) lf.value.history.undoStack && lf.value.history.undoStack.pop();
-  }
-}
+// 此函数不再需要，因为不会自动添加开始和结束节点
+// const ensureInitialFlow = (noHistory = false) => {
+//   // 已废弃：用户需要手动添加所有节点
+// }
 
 // 保存流程
 const handleSave = async () => {
@@ -1275,7 +1205,7 @@ const handleGenerateFlow = (nodes: any[]) => {
     // 创建连接线 - 按顺序连接所有节点
     for (let i = 0; i < nodes.length - 1; i++) {
       lf.value.addEdge({
-        type: 'bezier',
+        type: 'polyline',
         sourceNodeId: nodes[i].id,
         targetNodeId: nodes[i + 1].id,
         properties: {}
@@ -1351,31 +1281,17 @@ const loadFlowFromDatabase = async (id: number) => {
 // 拦截批量删除和快捷键删除
 if (lf.value) {
   lf.value.on('delete:node', (data: { nodes: any[] }) => {
-    // 过滤掉开始、结束节点，且customNodeCount>0时才允许删除
-    if (customNodeCount.value === 0) {
-      data.nodes = []
-      ElMessage.warning('不能删除关键节点或主链连线')
-      return
-    }
+    // 过滤掉开始、结束节点
     data.nodes = data.nodes.filter(n => n.type !== 'start' && n.type !== 'end')
     if (data.nodes.length > 0) {
       customNodeCount.value -= data.nodes.length
     }
     if (data.nodes.length === 0) {
-      ElMessage.warning('没有可删除的自定义节点')
+      ElMessage.warning('开始节点和结束节点不能删除')
     }
   })
   lf.value.on('delete:edge', (data: { edges: any[] }) => {
-    // 获取节点信息
-    const graphData = lf.value.getGraphData()
-    const nodes = graphData.nodes || []
-    const startNode = nodes.find((n: any) => n.type === 'start')
-    const endNode = nodes.find((n: any) => n.type === 'end')
-    // 过滤掉开始-结束连接线
-    data.edges = data.edges.filter(e => !(startNode && endNode && e.sourceNodeId === startNode.id && e.targetNodeId === endNode.id))
-    if (data.edges.length === 0) {
-      ElMessage.warning('开始节点和结束节点之间的连接线不能删除')
-    }
+    // 允许删除所有连接线，不再保护开始-结束节点之间的连接线
   })
 }
 </script>
