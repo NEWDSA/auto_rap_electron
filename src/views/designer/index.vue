@@ -35,6 +35,12 @@
           <el-icon><VideoCamera /></el-icon>
           智能录制
         </el-button>
+        
+        <!-- 添加 AI 助手按钮 -->
+        <el-button type="success" @click="showAIAssistant = true">
+          <el-icon><Cpu /></el-icon>
+          AI 助手
+        </el-button>
       </div>
     </div>
 
@@ -166,6 +172,12 @@
     v-model:visible="showRecorder" 
     @generate-flow="handleGenerateFlow"
   />
+  
+  <!-- AI 助手组件 -->
+  <AIAssistant
+    v-model="showAIAssistant"
+    @generate-flow="handleGenerateFlow"
+  />
 </template>
 
 <script setup lang="ts">
@@ -198,7 +210,8 @@ import {
   Operation,
   RefreshLeft,
   RefreshRight,
-  VideoCamera
+  VideoCamera,
+  Cpu
 } from '@element-plus/icons-vue'
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
@@ -224,6 +237,8 @@ import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
 
 // 导入智能录制组件
 import IntelligentRecorder from '@/components/recorder/IntelligentRecorder.vue'
+// 导入 AI 助手组件
+import AIAssistant from '@/components/ai-assistant/AIAssistant.vue'
 
 // 响应式状态
 const flowName = ref('')
@@ -239,6 +254,7 @@ const propertiesPanelCollapsed = ref(false)
 const isRunning = ref(false)
 const statusText = ref('')
 const showRecorder = ref(false)
+const showAIAssistant = ref(false)
 const isDragging = ref(false)
 const highlightDots = ref<Array<{x: number, y: number, edgeId: string}>>([])
 const dragOverlay = ref<HTMLElement | null>(null)
