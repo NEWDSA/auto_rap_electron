@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'scheduler:start-task',
       'scheduler:stop-task',
       'scheduler:get-task-log',
+      // AI配置相关通道
+      'get-ai-config',
+      'save-ai-config',
       // 统计相关通道
       'get-stats'
     ]
@@ -85,4 +88,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
-}) 
+})

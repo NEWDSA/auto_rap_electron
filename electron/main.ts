@@ -3,6 +3,7 @@ import path from 'path'
 import { spawn } from 'child_process'
 import { AutomationController } from './automation-controller'
 import fs from 'fs/promises'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import DatabaseService from './database'
 import { RecorderService } from '../src/core/recorder/RecorderService'
 import { TaskScheduler } from './scheduler'
@@ -479,6 +480,111 @@ ipcMain.handle('delete-configuration', async (_, id) => {
   }
 })
 
+// 注册 AI 配置相关的处理程序
+ipcMain.handle('get-ai-config', async () => {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'ai-config.json')
+    if (existsSync(configPath)) {
+      const config = readFileSync(configPath, 'utf-8')
+      return JSON.parse(config)
+    }
+    return null
+  } catch (error) {
+    console.error('读取 AI 配置失败:', error)
+    return null
+  }
+})
+
+ipcMain.handle('save-ai-config', async (event, config) => {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'ai-config.json')
+    writeFileSync(configPath, JSON.stringify(config, null, 2))
+    return { success: true }
+  } catch (error: any) {
+    console.error('保存 AI 配置失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 注册自定义模型相关的处理程序
+ipcMain.handle('get-custom-models', async () => {
+  try {
+    const modelsPath = path.join(app.getPath('userData'), 'custom-models.json')
+    if (fs.existsSync(modelsPath)) {
+      const models = fs.readFileSync(modelsPath, 'utf-8')
+      return JSON.parse(models)
+    }
+    return []
+  } catch (error) {
+    console.error('读取自定义模型失败:', error)
+    return []
+  }
+})
+
+ipcMain.handle('save-custom-models', async (event, models) => {
+  try {
+    const modelsPath = path.join(app.getPath('userData'), 'custom-models.json')
+    fs.writeFileSync(modelsPath, JSON.stringify(models, null, 2))
+    return { success: true }
+  } catch (error: any) {
+    console.error('保存自定义模型失败:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('test-custom-model', async (event, model) => {
+  try {
+    // 构建测试请求
+    const testPrompt = 'Hello, please respond with "OK" if you can understand this message.'
+    
+    let requestBody: any = {
+      model: model.model,
+      messages: [{ role: 'user', content: testPrompt }],
+      max_tokens: 10
+    }
+    
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+    
+    // 添加认证
+    if (model.apiKey) {
+      headers['Authorization'] = `Bearer ${model.apiKey}`
+    }
+    
+    // 添加自定义头部
+    if (model.customHeaders) {
+      try {
+        const customHeaders = JSON.parse(model.customHeaders)
+        headers = { ...headers, ...customHeaders }
+      } catch {
+        if (model.customHeaders.trim()) {
+          headers['Authorization'] = model.customHeaders
+        }
+      }
+    }
+    
+    // 发送测试请求
+    const response = await fetch(model.apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(10000) // 10秒超时
+    })
+    
+    if (!response.ok) {
+      const error = await response.text()
+      return { success: false, error: `HTTP ${response.status}: ${error}` }
+    }
+    
+    const data = await response.json()
+    return { success: true, response: data }
+  } catch (error: any) {
+    console.error('测试自定义模型失败:', error)
+    return { success: false, error: error.message || '连接失败' }
+  }
+})
+
 // 注册获取数据库路径的处理程序
 ipcMain.handle('get-database-path', () => {
   try {
@@ -714,4 +820,4 @@ app.on('window-all-closed', () => {
 // 处理未捕获的异常
 process.on('uncaughtException', (error) => {
   console.error('未捕获的异常:', error)
-}) 
+})
