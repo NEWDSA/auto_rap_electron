@@ -274,55 +274,57 @@ ipcMain.handle('element:startPicker', async () => {
 // 添加文件保存对话框处理程序
 ipcMain.handle('dialog:showSaveDialog', async (_, options) => {
   try {
-    const { fileName = 'export', exportType = 'excel', imageFormat = 'png' } = options || {}
+    const { fileName = 'export', exportType = 'excel', imageFormat = 'png', title, defaultPath, filters: customFilters } = options || {}
     
-    // 根据导出类型准备不同的文件过滤器
-    let filters = [{ name: '所有文件', extensions: ['*'] }]
+    // 优先使用传入的filters，否则根据导出类型准备不同的文件过滤器
+    let filters = customFilters || [{ name: '所有文件', extensions: ['*'] }]
     
-    switch (exportType) {
-      case 'excel':
-        filters.unshift({ name: 'Excel 文件', extensions: ['xlsx'] })
-        break
-      case 'csv':
-        filters.unshift({ name: 'CSV 文件', extensions: ['csv'] })
-        break
-      case 'json':
-        filters.unshift({ name: 'JSON 文件', extensions: ['json'] })
-        break
-      case 'docx':
-        filters.unshift({ name: 'Word 文档', extensions: ['docx'] })
-        break
-      case 'pdf':
-        filters.unshift({ name: 'PDF 文档', extensions: ['pdf'] })
-        break
-      case 'image':
-        if (imageFormat === 'jpeg') {
-          filters.unshift({ name: 'JPEG 图片', extensions: ['jpeg', 'jpg'] })
-        } else {
-          filters.unshift({ name: 'PNG 图片', extensions: ['png'] })
-        }
-        break
-      case 'txt':
-        filters.unshift({ name: '文本文件', extensions: ['txt'] })
-        break
-      default:
-        // 默认添加所有可用的格式
-        filters = [
-          { name: 'Excel 文件', extensions: ['xlsx'] },
-          { name: 'CSV 文件', extensions: ['csv'] },
-          { name: 'JSON 文件', extensions: ['json'] },
-          { name: 'Word 文档', extensions: ['docx'] },
-          { name: 'PDF 文档', extensions: ['pdf'] },
-          { name: 'PNG 图片', extensions: ['png'] },
-          { name: 'JPEG 图片', extensions: ['jpeg', 'jpg'] },
-          { name: '文本文件', extensions: ['txt'] },
-          { name: '所有文件', extensions: ['*'] }
-        ]
+    if (!customFilters) {
+      switch (exportType) {
+        case 'excel':
+          filters.unshift({ name: 'Excel 文件', extensions: ['xlsx'] })
+          break
+        case 'csv':
+          filters.unshift({ name: 'CSV 文件', extensions: ['csv'] })
+          break
+        case 'json':
+          filters.unshift({ name: 'JSON 文件', extensions: ['json'] })
+          break
+        case 'docx':
+          filters.unshift({ name: 'Word 文档', extensions: ['docx'] })
+          break
+        case 'pdf':
+          filters.unshift({ name: 'PDF 文档', extensions: ['pdf'] })
+          break
+        case 'image':
+          if (imageFormat === 'jpeg') {
+            filters.unshift({ name: 'JPEG 图片', extensions: ['jpeg', 'jpg'] })
+          } else {
+            filters.unshift({ name: 'PNG 图片', extensions: ['png'] })
+          }
+          break
+        case 'txt':
+          filters.unshift({ name: '文本文件', extensions: ['txt'] })
+          break
+        default:
+          // 默认添加所有可用的格式
+          filters = [
+            { name: 'Excel 文件', extensions: ['xlsx'] },
+            { name: 'CSV 文件', extensions: ['csv'] },
+            { name: 'JSON 文件', extensions: ['json'] },
+            { name: 'Word 文档', extensions: ['docx'] },
+            { name: 'PDF 文档', extensions: ['pdf'] },
+            { name: 'PNG 图片', extensions: ['png'] },
+            { name: 'JPEG 图片', extensions: ['jpeg', 'jpg'] },
+            { name: '文本文件', extensions: ['txt'] },
+            { name: '所有文件', extensions: ['*'] }
+          ]
+      }
     }
     
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: '保存文件',
-      defaultPath: fileName,
+      title: title || '保存文件',
+      defaultPath: defaultPath || fileName,
       filters: filters
     })
     
