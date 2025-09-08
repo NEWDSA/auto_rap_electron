@@ -59,8 +59,8 @@ export class FlowGenerator {
   /**
    * 规范化节点类型
    */
-  private normalizeNodeType(type: string): string {
-    const typeMap: Record<string, string> = {
+  private normalizeNodeType(type: string): 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' {
+    const typeMap: Record<string, 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export'> = {
       'browser': 'browser',
       'click': 'click',
       'input': 'input',
@@ -200,7 +200,7 @@ export class FlowGenerator {
       
       nodes.push({
         id: nodeId,
-        type: step.nodeType,
+        type: step.nodeType as 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export',
         x: this.startX,
         y: y,
         text: this.getNodeText(step),

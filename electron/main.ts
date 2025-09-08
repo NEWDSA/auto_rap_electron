@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
 import { AutomationController } from './automation-controller'
-import fs from 'fs/promises'
+import fs from 'fs'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import DatabaseService from './database'
 import { RecorderService } from '../src/core/recorder/RecorderService'
@@ -375,7 +375,7 @@ ipcMain.handle('fs:writeFile', async (_, filePath, content, options = {}) => {
     } 
     // 如果是其他类型，转为JSON字符串
     else {
-      await fs.writeFile(filePath, JSON.stringify(content), 'utf-8')
+      fs.writeFileSync(filePath, JSON.stringify(content), 'utf-8')
     }
     
     return { success: true }
