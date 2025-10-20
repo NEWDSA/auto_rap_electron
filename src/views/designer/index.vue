@@ -1,9 +1,9 @@
 <template>
-  <div class="h-full flex flex-col">
+  <div class="flex flex-col h-full">
     <!-- 顶部工具栏 -->
     <div class="p-2 flex items-center space-x-2 bg-[#fafafa] bg-opacity-80 backdrop-blur-sm border-b relative z-10">
-      <div class="absolute inset-0 bg-grid opacity-10"></div>
-      <div class="flex items-center space-x-4 relative">
+      <div class="absolute inset-0 opacity-10 bg-grid"></div>
+      <div class="flex relative items-center space-x-4">
         <el-button-group>
           <el-button type="primary" @click="handleSave">
             <el-icon><Document /></el-icon>
@@ -45,7 +45,7 @@
     </div>
 
     <!-- 主要内容区域 -->
-    <div class="flex-1 flex relative">
+    <div class="flex relative flex-1">
       <!-- 左侧工具箱 -->
       <div 
         class="left-toolbox"
@@ -53,7 +53,7 @@
       >
         <div class="toolbox-header">
           <span v-show="!toolsPanelCollapsed" class="text-sm">组件面板</span>
-          <el-button type="text" @click="toolsPanelCollapsed = !toolsPanelCollapsed">
+          <el-button link @click="toolsPanelCollapsed = !toolsPanelCollapsed">
             <el-icon>
               <component :is="toolsPanelCollapsed ? 'ArrowRight' : 'ArrowLeft'" />
             </el-icon>
@@ -72,7 +72,7 @@
                   <div
                     v-for="node in basicNodes"
                     :key="node.type"
-                    class="component-item p-2 rounded cursor-move hover:bg-gray-100"
+                    class="p-2 rounded cursor-move component-item hover:bg-gray-100"
                     draggable="true"
                     @dragstart="handleDragStart($event, node)"
                   >
@@ -91,7 +91,7 @@
                   <div
                     v-for="node in controlNodes"
                     :key="node.type"
-                    class="component-item p-2 rounded cursor-move hover:bg-gray-100"
+                    class="p-2 rounded cursor-move component-item hover:bg-gray-100"
                     draggable="true"
                     @dragstart="handleDragStart($event, node)"
                   >
@@ -101,19 +101,21 @@
                 </div>
               </el-collapse-item>
             </el-collapse>
+
+
           </div>
         </div>
       </div>
 
       <!-- 中间画布区域 -->
-      <div class="flex-1 flex flex-col designer-canvas">
-        <div class="flex-1 relative" ref="container">
+      <div class="flex flex-col flex-1 designer-canvas">
+        <div class="relative flex-1" ref="container">
           <div ref="flowContainer" class="w-full h-full canvas-container"></div>
           <!-- 拖拽时的高亮圆点覆盖层 -->
           <div 
             v-if="isDragging"
             ref="dragOverlay"
-            class="absolute inset-0 pointer-events-none z-10"
+            class="absolute inset-0 z-10 pointer-events-none"
           >
             <div
               v-for="dot in highlightDots"
@@ -136,12 +138,12 @@
       >
         <div class="panel-header">
           <span class="text-sm">属性设置</span>
-          <el-button type="text" @click="selectedNode = null">
+          <el-button link @click="selectedNode = null">
             <el-icon><Close /></el-icon>
           </el-button>
         </div>
         
-        <div class="panel-content p-4">
+        <div class="p-4 panel-content">
           <el-form label-position="top">
             <el-form-item label="节点名称">
               <el-input 
@@ -162,7 +164,7 @@
     </div>
 
     <!-- 底部状态栏 -->
-    <div class="h-8 border-t flex items-center bg-gray-50">
+    <div class="flex items-center h-8 bg-gray-50 border-t">
       <span class="text-sm text-gray-500">{{ statusText }}</span>
     </div>
   </div>
@@ -211,12 +213,14 @@ import {
   RefreshLeft,
   RefreshRight,
   VideoCamera,
-  Cpu
+  Cpu,
+  Key
 } from '@element-plus/icons-vue'
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
 import { FlowExecutor } from '@/utils/flow-executor'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { systemControl } from '@/services/system-control'
 
 // 导入节点配置组件
 import BrowserConfig from '@/components/node-configs/BrowserConfig.vue'
@@ -231,6 +235,8 @@ import WaitConfig from '@/components/node-configs/WaitConfig.vue'
 import ScreenshotConfig from '@/components/node-configs/ScreenshotConfig.vue'
 import ScrollConfig from '@/components/node-configs/ScrollConfig.vue'
 import ExportConfig from '@/components/node-configs/ExportConfig.vue'
+import CaptchaConfig from '@/components/node-configs/CaptchaConfig.vue'
+import PowerConfig from '@/components/node-configs/PowerConfig.vue'
 
 // 类型定义
 import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
@@ -272,12 +278,14 @@ const basicNodes: NodeConfig[] = [
   { type: 'click', name: '点击', icon: 'Pointer' },
   { type: 'input', name: '输入', icon: 'EditPen' },
   { type: 'extract', name: '提取', icon: 'Search' },
+  { type: 'captcha', name: '验证码识别', icon: 'Key' },
   { type: 'keyboard', name: '键盘', icon: 'EditPen' },
   { type: 'mouse', name: '鼠标', icon: 'Position' },
   { type: 'wait', name: '等待', icon: 'Timer' },
   { type: 'screenshot', name: '截图', icon: 'PictureRounded' },
   { type: 'scroll', name: '滚动', icon: 'DArrowDown' },
   { type: 'export', name: '导出', icon: 'Download' },
+  { type: 'power', name: '系统电源', icon: 'SwitchButton' },
   { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
 
@@ -297,12 +305,14 @@ const nodeConfigComponent = computed(() => {
     switch: ConditionConfig,
     loop: LoopConfig,
     extract: ExtractConfig,
+    captcha: CaptchaConfig,
     keyboard: KeyboardConfig,
     mouse: MouseConfig,
     wait: WaitConfig,
     screenshot: ScreenshotConfig,
     scroll: ScrollConfig,
-    export: ExportConfig
+    export: ExportConfig,
+    power: PowerConfig
   } as const
 
   const component = componentMap[selectedNode.value.type as keyof typeof componentMap]
@@ -515,6 +525,22 @@ const registerNodes = () => {
                   incognito: false,
                   width: 1280,
                   height: 800
+                };
+              }
+              
+              // 初始化验证码节点的默认属性
+              if (node.type === 'captcha' && !data.properties) {
+                data.properties = {
+                  provider: 'dama2',
+                  apiKey: '',
+                  captchaType: 'normal',
+                  source: 'screenshot',
+                  selector: '',
+                  variableName: 'captcha_result',
+                  autoInput: false,
+                  timeout: 30,
+                  retryCount: 3,
+                  onFailure: 'stop'
                 };
               }
             }
@@ -1299,9 +1325,32 @@ const handleSave = async () => {
 // 运行流程
 const handleRun = async () => {
   if (!lf.value) return
+  
   try {
+    // 检查许可证是否允许执行任务 - 暂时注释掉
+    // const { licenseService } = await import('@/services/license-service')
+    // const canExecute = licenseService.canExecuteTask()
+    
+    // if (!canExecute.allowed) {
+    //   ElMessage.error(canExecute.message || '无法运行流程')
+    //   return
+    // }
+    
     const data = lf.value.getGraphData()
+    
+    // 检查节点数量限制 - 暂时注释掉
+    // const nodeCount = data.nodes.length
+    // const canUseNodes = licenseService.canUseNodes(nodeCount)
+    
+    // if (!canUseNodes.allowed) {
+    //   ElMessage.error(canUseNodes.message || '节点数量超出限制')
+    //   return
+    // }
+    
     await flowExecutor.start(data.nodes)
+    
+    // 记录任务执行 - 暂时注释掉
+    // licenseService.recordExecution()
   } catch (error: any) {
     ElMessage.error(`运行出错: ${error.message}`)
   }
@@ -1311,6 +1360,29 @@ const handleRun = async () => {
 const handleStop = async () => {
   await flowExecutor.stop()
 }
+
+// 系统电源控制快捷方法（与设置页保持一致的确认交互）
+const doPowerAction = async (fn: () => Promise<{ success: boolean; error?: string }>, confirmText: string) => {
+  try {
+    await ElMessageBox.confirm(confirmText, '请确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+
+  const res = await fn()
+  if (!res.success) {
+    ElMessage.error(res.error || '操作失败')
+  }
+}
+
+const confirmShutdown = (force: boolean) => doPowerAction(() => systemControl.shutdown(force), `确定要${force ? '强制' : ''}关机吗？`)
+const confirmRestart = (force: boolean) => doPowerAction(() => systemControl.restart(force), `确定要${force ? '强制' : ''}重启吗？`)
+const lockScreen = () => doPowerAction(() => systemControl.lock(), '确定要锁定屏幕吗？')
+const sleep = () => doPowerAction(() => systemControl.sleep(), '确定要让电脑进入睡眠吗？')
 
 // 视图控制方法
 const handleZoomIn = () => {

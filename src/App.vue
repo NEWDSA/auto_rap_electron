@@ -1,11 +1,14 @@
 <template>
   <el-config-provider :locale="zhCn">
-    <router-view />
+    <LicenseGuard>
+      <router-view />
+    </LicenseGuard>
   </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import LicenseGuard from '@/components/LicenseGuard.vue'
 </script>
 
 <style>

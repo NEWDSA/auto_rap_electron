@@ -83,18 +83,7 @@
       <div class="space-y-4">
         <div class="flex items-center space-x-4">
           <el-button type="primary" @click="openBrowser">打开浏览器</el-button>
-          <el-checkbox
-            v-model="node.properties.headless"
-            @change="handleChange('headless')"
-          >
-            无头模式
-          </el-checkbox>
-          <el-checkbox
-            v-model="node.properties.incognito"
-            @change="handleChange('incognito')"
-          >
-            隐身模式
-          </el-checkbox>
+          <span class="text-gray-500 text-sm">使用 Electron 内置浏览器</span>
         </div>
       </div>
     </el-form-item>
@@ -192,8 +181,6 @@ const openBrowserForClick = async () => {
       url: props.node.properties.url || 'about:blank',
       width: props.node.properties.width,
       height: props.node.properties.height,
-      headless: false,
-      incognito: props.node.properties.incognito,
       userAgent: props.node.properties.userAgent
     });
     
@@ -214,8 +201,6 @@ const openBrowser = async () => {
       url: props.node.properties.url || 'about:blank',
       width: props.node.properties.width,
       height: props.node.properties.height,
-      headless: props.node.properties.headless || false,
-      incognito: props.node.properties.incognito,
       userAgent: props.node.properties.userAgent
     });
   } catch (error) {
@@ -236,12 +221,7 @@ onMounted(() => {
   if (!props.node.properties.timeout) {
     props.node.properties.timeout = 30
   }
-  if (props.node.properties.headless === undefined) {
-    props.node.properties.headless = false
-  }
-  if (props.node.properties.incognito === undefined) {
-    props.node.properties.incognito = false
-  }
+
   if (!props.node.properties.width) {
     props.node.properties.width = 1280
   }
@@ -255,4 +235,4 @@ onMounted(() => {
     props.node.properties.clickTimeout = 5
   }
 })
-</script> 
+</script>

@@ -23,6 +23,7 @@ dist-electron
 release
 *.local
 build
+ 
 
 # Editor directories and files
 .vscode/*

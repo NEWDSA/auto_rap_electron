@@ -356,9 +356,20 @@ const handleRefresh = () => {
 // 启动任务
 const startTask = async (task: any) => {
   try {
+    // 检查许可证是否允许执行任务
+    const { licenseService } = await import('@/services/license-service')
+    const canExecute = licenseService.canExecuteTask()
+    
+    if (!canExecute.allowed) {
+      ElMessage.error(canExecute.message || '无法执行任务')
+      return
+    }
+    
     // 使用调度器API启动任务
     const result = await window.electronAPI.invoke('scheduler:start-task', task.id);
     if (result.success) {
+      // 记录任务执行
+      licenseService.recordExecution()
       ElMessage.success('任务启动成功')
       // 刷新任务列表
       loadTasksFromDatabase()
@@ -682,4 +693,4 @@ onMounted(() => {
 :deep(.dark .el-table .cell) {
   @apply text-gray-300;
 }
-</style> 
+</style>

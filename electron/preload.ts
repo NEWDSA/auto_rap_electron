@@ -46,7 +46,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'get-ai-config',
       'save-ai-config',
       // 统计相关通道
-      'get-stats'
+      'get-stats',
+      // 系统电源控制
+      'system:power'
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

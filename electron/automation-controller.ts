@@ -1,10 +1,10 @@
-import { chromium, Browser, Page, BrowserContext, Locator } from 'playwright'
+import { BrowserWindow, WebContents } from 'electron'
 import type { FlowNode, NodeProperties } from '../src/types/node-config'
 import { ExportUtils } from '../src/utils/exportUtils'
 
 export class AutomationController {
-  private browser: Browser | null = null
-  private page: Page | null = null
+  private browserWindow: BrowserWindow | null = null
+  private webContents: WebContents | null = null
   private variables: Record<string, any> = {}
   private isRunning: boolean = false
   private isPickingElement: boolean = false
@@ -12,28 +12,38 @@ export class AutomationController {
   private pickerPromiseState: 'pending' | 'resolved' | 'rejected' | null = null
   private lastExtractedData: any = null
 
-  // 获取当前页面
-  getCurrentPage() {
-    return this.page
+  // 获取当前页面内容
+  getCurrentWebContents() {
+    return this.webContents
   }
 
-  // 获取当前浏览器
+  // 获取当前浏览器窗口
+  getCurrentBrowserWindow() {
+    return this.browserWindow
+  }
+
+  // 获取当前浏览器实例（为了兼容性）
   getCurrentBrowser() {
-    return this.browser
+    return this.browserWindow
   }
 
-  // 设置当前页面
-  async setCurrentPage(page: Page) {
+  // 获取当前页面（为了兼容性）
+  getCurrentPage() {
+    return this.webContents
+  }
+
+  // 设置当前页面内容
+  async setCurrentWebContents(webContents: WebContents) {
     // 如果正在选择元素，不允许更改页面
     if (this.pickerLock) {
       throw new Error('正在选择元素，不能更改页面')
     }
-    this.page = page
+    this.webContents = webContents
   }
 
   // 检查浏览器是否已打开
   isBrowserOpen() {
-    return this.browser !== null && this.page !== null && !this.page.isClosed()
+    return this.browserWindow !== null && this.webContents !== null && !this.browserWindow.isDestroyed()
   }
 
   // 检查是否正在选择元素
@@ -56,59 +66,54 @@ export class AutomationController {
     }
 
     // 如果已有浏览器实例且不是元素选择器调用，则关闭现有实例
-    if (this.browser && !options.forElementPicker) {
+    if (this.browserWindow && !options.forElementPicker) {
       try {
-        await this.browser.close()
+        this.browserWindow.close()
       } catch (e) {
         // 忽略关闭错误
       }
-      this.browser = null
-      this.page = null
+      this.browserWindow = null
+      this.webContents = null
     }
 
     // 如果浏览器已存在且是元素选择器调用，直接返回
-    if (this.browser?.isConnected() && options.forElementPicker) {
+    if (this.browserWindow && !this.browserWindow.isDestroyed() && options.forElementPicker) {
       return
     }
 
     try {
-      // 创建新的浏览器实例
-      this.browser = await chromium.launch({
-        headless: options.headless ?? false
-      })
-
-      // 添加断开连接的监听
-      this.browser.on('disconnected', () => {
-        // 只有在非选择器模式下才重置状态
-        if (!this.pickerLock) {
-          this.browser = null
-          this.page = null
+      // 创建新的浏览器窗口
+      this.browserWindow = new BrowserWindow({
+        width: options.width || 1280,
+        height: options.height || 800,
+        show: !options.headless, // headless 模式下不显示窗口
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          webSecurity: false, // 允许跨域请求
+          allowRunningInsecureContent: true
         }
       })
 
-      // 创建新的上下文
-      const context = await this.browser.newContext({
-        viewport: options.width && options.height ? {
-          width: options.width,
-          height: options.height
-        } : undefined,
-        userAgent: options.userAgent
-      })
+      this.webContents = this.browserWindow.webContents
 
-      // 创建新的页面
-      this.page = await context.newPage()
+      // 设置用户代理
+      if (options.userAgent) {
+        this.webContents.setUserAgent(options.userAgent)
+      }
 
-      // 添加页面关闭的监听
-      this.page.on('close', () => {
+      // 添加窗口关闭的监听
+      this.browserWindow.on('closed', () => {
         // 只有在非选择器模式下才重置状态
         if (!this.pickerLock) {
-          this.page = null
+          this.browserWindow = null
+          this.webContents = null
         }
       })
 
       // 如果提供了URL，则导航到该页面
       if (options.url) {
-        await this.page.goto(options.url)
+        await this.browserWindow.loadURL(options.url)
       }
     } catch (error) {
       console.error('初始化浏览器失败:', error)
@@ -122,77 +127,40 @@ export class AutomationController {
 
     try {
       // 始终关闭现有的浏览器实例，确保每次从干净状态开始
-      if (this.browser) {
+      if (this.browserWindow) {
         try {
-          console.log('关闭现有浏览器实例，准备重新启动...');
-          await this.browser.close();
+          console.log('关闭现有浏览器窗口，准备重新启动...');
+          this.browserWindow.close();
         } catch (error: unknown) {
-          console.warn('关闭浏览器时出错:', error);
+          console.warn('关闭浏览器窗口时出错:', error);
           // 忽略关闭错误
         }
-        this.browser = null;
-        this.page = null;
+        this.browserWindow = null;
+        this.webContents = null;
       }
 
-      // 启动新的浏览器实例
-      console.log('启动新的浏览器实例...');
-      try {
-        const { app } = require('electron');
-        const path = require('path');
-        const os = require('os');
-
-        // 获取 Chromium 路径
-        let chromiumPath: string;
-        if (app.isPackaged) {
-          // 在打包后的环境中
-          chromiumPath = path.join(process.resourcesPath, 'chromium', 'chrome-win', 'chrome.exe');
-          console.log('打包环境 Chromium 路径:', chromiumPath);
-        } else {
-          // 在开发环境中
-          chromiumPath = path.join(
-            os.homedir(),
-            'AppData',
-            'Local',
-            'ms-playwright',
-            'chromium-1097',
-            'chrome.exe'
-          );
-          console.log('开发环境 Chromium 路径:', chromiumPath);
+      // 创建新的浏览器窗口
+      console.log('创建新的浏览器窗口...');
+      this.browserWindow = new BrowserWindow({
+        width: 1280,
+        height: 800,
+        show: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          webSecurity: false, // 允许跨域请求
+          allowRunningInsecureContent: true
         }
-
-        console.log('尝试使用 Chromium 路径:', chromiumPath);
-
-        this.browser = await chromium.launch({
-          headless: false,
-          executablePath: chromiumPath,
-          args: ['--disable-web-security', '--disable-features=IsolateOrigins', '--disable-site-isolation-trials']
-        });
-        console.log('浏览器启动成功');
-      } catch (error) {
-        console.error('使用指定路径启动浏览器失败:', error);
-        console.log('尝试使用默认配置启动浏览器...');
-        this.browser = await chromium.launch({
-          headless: false,
-          args: ['--disable-web-security', '--disable-features=IsolateOrigins', '--disable-site-isolation-trials']
-        });
-      }
-
-      // 创建新的页面
-      console.log('创建新的页面...');
-      const context = await this.browser.newContext({
-        viewport: { width: 1280, height: 800 },
-        ignoreHTTPSErrors: true
       });
-      this.page = await context.newPage();
 
-      // 配置页面
-      await this.page.setDefaultTimeout(30000); // 设置默认超时为30秒
+      this.webContents = this.browserWindow.webContents;
+      console.log('浏览器窗口创建成功');
       
-      // 设置浏览器关闭事件处理
-      this.browser.on('disconnected', () => {
-        console.log('浏览器已断开连接');
-        this.browser = null;
-        this.page = null;
+      // 设置浏览器窗口关闭事件处理
+      this.browserWindow.on('closed', () => {
+        console.log('浏览器窗口已关闭');
+        this.browserWindow = null;
+        this.webContents = null;
         this.isRunning = false;
       });
 
@@ -217,18 +185,15 @@ export class AutomationController {
 
   async stop() {
     this.isRunning = false
-    if (this.page) {
-      await this.page.close()
-      this.page = null
-    }
-    if (this.browser) {
-      await this.browser.close()
-      this.browser = null
+    if (this.browserWindow && !this.browserWindow.isDestroyed()) {
+      this.browserWindow.close()
+      this.browserWindow = null
+      this.webContents = null
     }
   }
 
   private async executeNode(node: FlowNode, nodes: FlowNode[] = []) {
-    if (!this.page) throw new Error('浏览器未启动')
+    if (!this.webContents) throw new Error('浏览器未启动')
 
     const { type, properties } = node
     
@@ -248,6 +213,9 @@ export class AutomationController {
         break
       case 'keyboard':
         await this.executeKeyboardNode(properties)
+        break
+      case 'captcha':
+        await this.executeCaptchaNode(properties)
         break
       case 'mouse':
         await this.executeMouseNode(properties)
@@ -273,13 +241,106 @@ export class AutomationController {
       case 'export':
         await this.executeExportNode(properties)
         break
+      case 'power':
+        await this.executePowerNode(properties)
+        break
       default:
         throw new Error(`未知的节点类型: ${type}`)
     }
   }
 
+  private async executePowerNode(properties: NodeProperties) {
+    const { actionType = 'lock', force = true } = properties as any
+    try {
+      if (process.platform !== 'win32') {
+        throw new Error(`当前平台不支持电源节点: ${process.platform}`)
+      }
+
+      const { spawn } = require('child_process')
+      const fs = require('fs')
+      const path = require('path')
+      const os = require('os')
+      const logFile = path.join(os.tmpdir(), 'autorap-power.log')
+
+      const run = (command: string, args: string[], options: { detached?: boolean } = {}) => {
+        return new Promise<{ code: number | null; error?: any }>((resolve) => {
+          const child = spawn(command, args, {
+            shell: true,
+            stdio: ['ignore', 'ignore', 'pipe'],
+            detached: !!options.detached
+          })
+          let errBuf = ''
+          child.stderr?.on('data', (d: any) => { errBuf += d?.toString?.() || '' })
+          child.on('error', (err: any) => {
+            try { fs.appendFileSync(logFile, `spawn error ${command} ${args.join(' ')}\n${String(err)}\n`) } catch {}
+            resolve({ code: -1, error: err })
+          })
+          child.on('close', (code: number) => {
+            try { if (errBuf) fs.appendFileSync(logFile, `stderr ${command} ${args.join(' ')}\n${errBuf}\n`) } catch {}
+            resolve({ code })
+          })
+          if (options.detached) {
+            try { child.unref() } catch {}
+          }
+        })
+      }
+      let command = ''
+      let args: string[] = []
+
+      switch (actionType) {
+        case 'shutdown':
+          command = 'shutdown'
+          args = ['/s']
+          if (force !== false) args.push('/f')
+          args.push('/t', '0')
+          break
+        case 'restart':
+          command = 'shutdown'
+          args = ['/r']
+          if (force !== false) args.push('/f')
+          args.push('/t', '0')
+          break
+        case 'sleep':
+          // 优先使用休眠（更稳定）：shutdown /h；失败再尝试 SetSuspendState 0,0,0
+          // 先尝试休眠
+          command = 'shutdown'
+          args = ['/h']
+          break
+        case 'lock':
+        default:
+          command = 'rundll32.exe'
+          args = ['user32.dll,LockWorkStation']
+          break
+      }
+
+      // 主执行与降级链，优先尝试更可靠方式，并记录日志帮助定位
+      if (actionType === 'lock') {
+        const r1 = await run(command, args)
+        if (r1.code === 0) return
+        const r2 = await run('tsdiscon', [])
+        if (r2.code === 0) return
+        throw new Error('锁屏命令未生效（LockWorkStation/tsdiscon 均失败），请以管理员运行或检查组策略。')
+      } else if (actionType === 'sleep') {
+        const r1 = await run(command, args)
+        if (r1.code === 0) return
+        const r2 = await run('rundll32.exe', ['powrprof.dll,SetSuspendState', '0,0,0'])
+        if (r2.code === 0) return
+        throw new Error('睡眠/休眠未生效（/h 与 SetSuspendState 均失败），请开启休眠并关闭混合睡眠。')
+      } else {
+        // shutdown/restart 直接执行（强制）
+        const r1 = await run(command, args, { detached: true })
+        if (r1.code !== 0) {
+          throw new Error('关机/重启命令启动失败，可能被安全策略拦截。')
+        }
+      }
+    } catch (error) {
+      console.error('执行电源操作失败:', error)
+      throw new Error(`执行电源操作失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   private async executeClickNode(properties: NodeProperties) {
-    if (!this.page) throw new Error('浏览器未启动')
+    if (!this.webContents) throw new Error('浏览器未启动')
 
     const { 
       selector: clickSelector,
@@ -329,59 +390,75 @@ export class AutomationController {
 
       console.log(`点击元素: 选择器类型=${currentSelectorType}, 原始选择器=${targetSelector}, 实际选择器=${actualSelector}`)
 
-      // 等待页面加载完成
-      await this.page.waitForLoadState('networkidle', { 
-        timeout: (clickTimeout || 30) * 1000 
-      })
-
-      // 等待元素可见和可交互
-      const element = await this.page.waitForSelector(actualSelector, { 
-        state: 'visible',
-        timeout: (clickTimeout || 30) * 1000 
-      })
-
-      if (!element) {
-        throw new Error('未找到可点击的元素')
-      }
-
-      // 确保元素可交互
-      await element.waitForElementState('enabled', { 
-        timeout: (clickTimeout || 30) * 1000 
-      })
-
-      // 确保元素在视图中
-      await element.scrollIntoViewIfNeeded()
-      
       // 获取当前URL
-      const currentUrl = this.page.url()
+      const currentUrl = this.webContents.getURL()
       
-      // 执行点击
-      await element.click({
-        timeout: (clickTimeout || 30) * 1000
-      })
+      // 使用 JavaScript 执行点击操作
+      const clickResult = await this.webContents.executeJavaScript(`
+        (function() {
+          const selector = '${actualSelector.replace(/'/g, "\\'")}';
+          const selectorType = '${currentSelectorType}';
+          
+          let element;
+          
+          if (selectorType === 'xpath') {
+            const result = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            element = result.singleNodeValue;
+          } else {
+            element = document.querySelector(selector);
+          }
+          
+          if (!element) {
+            throw new Error('未找到可点击的元素');
+          }
+          
+          // 滚动到元素位置
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // 等待一下确保滚动完成
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              // 执行点击
+              element.click();
+              resolve(true);
+            }, 500);
+          });
+        })()
+      `);
+      
+      if (!clickResult) {
+        throw new Error('点击操作失败');
+      }
       
       // 如果需要等待加载
       if (waitAfterClick && clickTimeout) {
-        // 等待URL变化（针对分页场景）
-        try {
-          await this.page.waitForURL((url: URL) => url.toString() !== currentUrl, { 
-            timeout: clickTimeout * 1000,
-            waitUntil: 'networkidle'
-          })
-        } catch (error: unknown) {
-          // 如果URL没有变化，可能不是分页操作，继续等待页面加载
-          await this.page.waitForLoadState('networkidle', { 
-            timeout: clickTimeout * 1000 
-          })
-        }
-
-        // 等待页面完全加载
-        await this.page.waitForLoadState('domcontentloaded', { 
-          timeout: clickTimeout * 1000 
-        })
-        
-        // 额外等待以确保页面渲染完成
-        await this.page.waitForTimeout(1000)
+        await new Promise((resolve) => {
+          const timeoutId = setTimeout(() => {
+            console.warn('等待页面加载超时，继续执行');
+            resolve(void 0);
+          }, clickTimeout * 1000);
+          
+          // 监听页面加载完成或URL变化
+          const checkComplete = () => {
+            if (this.webContents) {
+              const newUrl = this.webContents.getURL();
+              if (newUrl !== currentUrl) {
+                clearTimeout(timeoutId);
+                resolve(void 0);
+              }
+            }
+          };
+          
+          if (this.webContents) {
+            this.webContents.once('did-finish-load', () => {
+              clearTimeout(timeoutId);
+              resolve(void 0);
+            });
+            
+            this.webContents.once('did-navigate', checkComplete);
+            this.webContents.once('did-navigate-in-page', checkComplete);
+          }
+        });
       }
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : '未知错误'
@@ -390,7 +467,7 @@ export class AutomationController {
   }
 
   private async executeBrowserNode(properties: NodeProperties) {
-    if (!this.page) return
+    if (!this.webContents || !this.browserWindow) return
 
     const { 
       actionType, 
@@ -409,14 +486,14 @@ export class AutomationController {
       
       // 设置浏览器窗口大小
       if (width && height) {
-        console.log(`设置视窗大小: ${width}x${height}`);
-        await this.page.setViewportSize({ width, height });
+        console.log(`设置窗口大小: ${width}x${height}`);
+        this.browserWindow.setSize(width, height);
       }
   
       // 设置用户代理
       if (userAgent) {
         console.log(`设置用户代理: ${userAgent}`);
-        await this.page.setExtraHTTPHeaders({ 'User-Agent': userAgent });
+        this.webContents.setUserAgent(userAgent);
       }
   
       switch (actionType) {
@@ -424,87 +501,104 @@ export class AutomationController {
           if (url) {
             console.log(`导航到URL: ${url}`);
             
-            // 尝试导航，添加重试机制
-            let success = false;
-            let attempts = 0;
-            const maxAttempts = 3;
-            
-            while (!success && attempts < maxAttempts) {
-              try {
-                attempts++;
-                const response = await this.page.goto(url, {
-                  timeout: timeout ? timeout * 1000 : 30000,
-                  waitUntil: 'domcontentloaded'
-                });
-                
-                if (!response) {
-                  console.warn(`导航没有返回响应，URL: ${url}`);
-                  if (attempts < maxAttempts) continue;
-                }
-                
-                success = true;
-                console.log(`成功导航到: ${this.page.url()}`);
-                
-                // 等待页面加载完成
-                if (waitForLoad) {
-                  try {
-                    console.log('等待网络活动完成...');
-                    await this.page.waitForLoadState('networkidle', { 
-                      timeout: timeout ? timeout * 1000 : 30000 
+            // 使用 Electron webContents 导航
+            try {
+              await this.webContents.loadURL(url);
+              console.log(`成功导航到: ${this.webContents.getURL()}`);
+              
+              // 等待页面加载完成
+              if (waitForLoad) {
+                await new Promise((resolve) => {
+                  const timeoutId = setTimeout(() => {
+                    console.warn('等待页面加载超时，继续执行');
+                    resolve(void 0);
+                  }, timeout ? timeout * 1000 : 30000);
+                  
+                  if (this.webContents) {
+                    this.webContents.once('did-finish-load', () => {
+                      clearTimeout(timeoutId);
+                      console.log('页面加载完成');
+                      resolve(void 0);
                     });
-                  } catch (e) {
-                    console.warn('等待网络活动超时，继续执行', e);
                   }
-                }
-              } catch (error) {
-                console.error(`导航失败(尝试 ${attempts}/${maxAttempts}):`, error);
-                if (attempts >= maxAttempts) throw error;
-                
-                // 短暂等待后重试
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                });
               }
+            } catch (error) {
+              console.error('导航失败:', error);
+              throw error;
             }
           }
           break;
         case 'back':
           console.log('返回上一页');
-          await this.page.goBack();
+          this.webContents.goBack();
           if (waitForLoad) {
-            await this.page.waitForLoadState('networkidle', { 
-              timeout: timeout ? timeout * 1000 : 30000 
-            }).catch(e => console.warn('等待网络活动超时', e));
+            await new Promise((resolve) => {
+              const timeoutId = setTimeout(() => {
+                console.warn('等待页面加载超时，继续执行');
+                resolve(void 0);
+              }, timeout ? timeout * 1000 : 30000);
+              
+              if (this.webContents) {
+                this.webContents.once('did-finish-load', () => {
+                  clearTimeout(timeoutId);
+                  resolve(void 0);
+                });
+              }
+            });
           }
           break;
         case 'forward':
           console.log('前往下一页');
-          await this.page.goForward();
+          this.webContents.goForward();
           if (waitForLoad) {
-            await this.page.waitForLoadState('networkidle', { 
-              timeout: timeout ? timeout * 1000 : 30000 
-            }).catch(e => console.warn('等待网络活动超时', e));
+            await new Promise((resolve) => {
+              const timeoutId = setTimeout(() => {
+                console.warn('等待页面加载超时，继续执行');
+                resolve(void 0);
+              }, timeout ? timeout * 1000 : 30000);
+              
+              if (this.webContents) {
+                this.webContents.once('did-finish-load', () => {
+                  clearTimeout(timeoutId);
+                  resolve(void 0);
+                });
+              }
+            });
           }
           break;
         case 'reload':
           console.log('刷新页面');
-          await this.page.reload();
+          this.webContents.reload();
           if (waitForLoad) {
-            await this.page.waitForLoadState('networkidle', { 
-              timeout: timeout ? timeout * 1000 : 30000 
-            }).catch(e => console.warn('等待网络活动超时', e));
+            await new Promise((resolve) => {
+              const timeoutId = setTimeout(() => {
+                console.warn('等待页面加载超时，继续执行');
+                resolve(void 0);
+              }, timeout ? timeout * 1000 : 30000);
+              
+              if (this.webContents) {
+                this.webContents.once('did-finish-load', () => {
+                  clearTimeout(timeoutId);
+                  resolve(void 0);
+                });
+              }
+            });
           }
           break;
         case 'close':
           console.log('关闭页面');
-          await this.page.close();
-          this.page = null;
+          this.browserWindow.close();
+          this.browserWindow = null;
+          this.webContents = null;
           break;
         case 'maximize':
           console.log('最大化窗口');
-          await this.page.setViewportSize({ width: 1920, height: 1080 });
+          this.browserWindow.maximize();
           break;
         case 'minimize':
           console.log('最小化窗口');
-          await this.page.setViewportSize({ width: 800, height: 600 });
+          this.browserWindow.minimize();
           break;
       }
       
@@ -603,7 +697,7 @@ export class AutomationController {
   }
 
   private async executeExtractNode(properties: NodeProperties) {
-    if (!this.page) throw new Error('浏览器未启动')
+    if (!this.webContents) throw new Error('浏览器未启动')
 
     const { 
       selector, 
@@ -664,12 +758,44 @@ export class AutomationController {
         timeout: (timeout * 1000) // 转换为毫秒
       }
       console.log(`等待选择器 ${actualSelector} 出现，超时时间 ${timeout} 秒`)
-      await this.page.waitForSelector(actualSelector, waitOptions as any)
+      
+      // 使用 webContents.executeJavaScript 等待元素并提取数据
+      await new Promise((resolve, reject) => {
+        const startTime = Date.now()
+        const checkElement = async () => {
+          try {
+            if (!this.webContents) return;
+            const exists = await this.webContents.executeJavaScript(`
+              (function() {
+                const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+                return element !== null
+              })()
+            `)
+            
+            if (exists) {
+              resolve(void 0)
+            } else if (Date.now() - startTime > timeout * 1000) {
+              reject(new Error(`等待选择器 ${actualSelector} 超时`))
+            } else {
+              setTimeout(checkElement, 100)
+            }
+          } catch (error) {
+            reject(error)
+          }
+        }
+        checkElement()
+      })
+      
       console.log(`选择器 ${actualSelector} 已找到`)
 
       switch (extractType) {
         case 'text':
-          value = await this.page.textContent(actualSelector)
+          value = await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+              return element ? element.textContent : null
+            })()
+          `)
           if (trimContent && typeof value === 'string') {
             value = value.trim()
           }
@@ -677,7 +803,12 @@ export class AutomationController {
 
         case 'attribute':
           if (attributeName) {
-            value = await this.page.getAttribute(actualSelector, attributeName)
+            value = await this.webContents.executeJavaScript(`
+              (function() {
+                const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+                return element ? element.getAttribute('${attributeName.replace(/'/g, "\\'")}'): null
+              })()
+            `)
             if (trimContent && typeof value === 'string') {
               value = value.trim()
             }
@@ -685,7 +816,12 @@ export class AutomationController {
           break
 
         case 'html':
-          value = await this.page.innerHTML(actualSelector)
+          value = await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+              return element ? element.innerHTML : null
+            })()
+          `)
           if (trimContent && typeof value === 'string') {
             value = value.trim()
           }
@@ -697,9 +833,12 @@ export class AutomationController {
           
           // 如果有表头
           if (hasHeader && headerSelector) {
-            const headers = await this.page.$$eval(headerSelector, cells => 
-              cells.map(cell => cell.textContent?.trim() || '')
-            )
+            const headers = await this.webContents.executeJavaScript(`
+              (function() {
+                const cells = document.querySelectorAll('${headerSelector.replace(/'/g, "\\'")}')
+                return Array.from(cells).map(cell => cell.textContent?.trim() || '')
+              })()
+            `)
             if (headers.length > 0) {
               tableData.push(headers)
             }
@@ -707,20 +846,22 @@ export class AutomationController {
 
           // 提取数据行
           if (rowSelector) {
-            const rows = await this.page.$$(rowSelector)
-            for (const row of rows) {
-              const cells = cellSelector 
-                ? await row.$$(cellSelector)
-                : await row.$$('td, th')
-              
-              const rowData = await Promise.all(
-                cells.map(cell => 
-                  cell.evaluate(node => node.textContent?.trim() || '')
-                )
-              )
-              
-              tableData.push(rowData)
-            }
+            const tableRows = await this.webContents.executeJavaScript(`
+              (function() {
+                const rows = document.querySelectorAll('${rowSelector.replace(/'/g, "\\'")}')
+                const result = []
+                
+                for (const row of rows) {
+                  const cells = ${cellSelector ? `row.querySelectorAll('${cellSelector.replace(/'/g, "\\'")}')`  : `row.querySelectorAll('td, th')`}
+                  const rowData = Array.from(cells).map(cell => cell.textContent?.trim() || '')
+                  result.push(rowData)
+                }
+                
+                return result
+              })()
+            `)
+            
+            tableData.push(...tableRows)
           }
           
           value = tableData
@@ -728,11 +869,14 @@ export class AutomationController {
 
         case 'list':
           // 提取列表数据
-          value = await this.page.$$eval(actualSelector, (elements, extractHTML) => {
-            return elements.map(el => 
-              extractHTML ? el.innerHTML : el.textContent?.trim()
-            )
-          }, extractInnerHTML)
+          value = await this.webContents.executeJavaScript(`
+            (function() {
+              const elements = document.querySelectorAll('${actualSelector.replace(/'/g, "\\'")}')
+              return Array.from(elements).map(el => 
+                ${extractInnerHTML ? 'el.innerHTML' : 'el.textContent?.trim()'}
+              )
+            })()
+          `)
           break
 
         default:
@@ -767,7 +911,7 @@ export class AutomationController {
   }
 
   private async executeKeyboardNode(properties: NodeProperties) {
-    if (!this.page) throw new Error('页面未打开')
+    if (!this.webContents) throw new Error('页面未打开')
 
     const { 
       keyboardActionType, 
@@ -783,47 +927,98 @@ export class AutomationController {
 
     try {
       // 如果提供了选择器，先定位和聚焦元素
-      let element = null
       if (selector) {
-        element = await this.page.locator(selector).first()
-        await element.waitFor({ state: 'visible', timeout: 30000 })
-        await element.scrollIntoViewIfNeeded()
-        await element.focus()
+        await this.webContents.executeJavaScript(`
+          (function() {
+            const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              element.focus()
+              return true
+            }
+            return false
+          })()
+        `)
       }
 
       switch (keyboardActionType) {
         case 'press':
           if (key) {
-            if (modifiers && modifiers.length > 0) {
-              // 使用组合键语法 (例如: 'Control+A', 'Shift+Tab')
-              const modifierKey = modifiers.map(mod => this.normalizeModifierKey(mod)).join('+')
-              const combinedKey = `${modifierKey}+${key}`
-              await this.page.keyboard.press(combinedKey)
-            } else {
-              // 处理特殊键 (例如: 'Enter', 'F11', 'Tab')
-              await this.page.keyboard.press(key)
+            // 使用 webContents.sendInputEvent 发送键盘事件
+            const keyEvent: any = {
+              type: 'keyDown',
+              keyCode: this.getKeyCode(key)
             }
+            
+            // 添加修饰键
+            if (modifiers && modifiers.length > 0) {
+              modifiers.forEach(modifier => {
+                const normalizedModifier = this.normalizeModifierKey(modifier)
+                if (normalizedModifier === 'Control') keyEvent.modifiers = (keyEvent.modifiers || 0) | 2
+                if (normalizedModifier === 'Alt') keyEvent.modifiers = (keyEvent.modifiers || 0) | 1
+                if (normalizedModifier === 'Shift') keyEvent.modifiers = (keyEvent.modifiers || 0) | 4
+                if (normalizedModifier === 'Meta') keyEvent.modifiers = (keyEvent.modifiers || 0) | 8
+              })
+            }
+            
+            this.webContents.sendInputEvent(keyEvent)
+            this.webContents.sendInputEvent({ ...keyEvent, type: 'keyUp' })
 
             // 特殊处理：如果是 Enter 键，等待页面变化
             if (key.toLowerCase() === 'enter') {
-              await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {})
+              await new Promise(resolve => {
+                const timeout = setTimeout(resolve, 5000)
+                if (this.webContents) {
+                  this.webContents.once('did-finish-load', () => {
+                    clearTimeout(timeout)
+                    resolve(void 0)
+                  })
+                }
+              })
             }
           }
           break
 
         case 'type':
           if (text) {
-            if (element) {
-              if (simulateTyping) {
-                // 使用 pressSequentially 进行逐字符输入，模拟人工输入
-                await element.pressSequentially(text, { delay: typingDelay || 100 })
-              } else {
-                // 使用 fill 进行快速输入
-                await element.fill(text)
-              }
+            if (selector) {
+              // 如果有选择器，直接设置元素值
+              await this.webContents.executeJavaScript(`
+                (function() {
+                  const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+                  if (element) {
+                    ${simulateTyping ? `
+                      // 模拟逐字符输入
+                      const text = '${text.replace(/'/g, "\\'").replace(/\n/g, '\\n')}'
+                      element.value = ''
+                      let i = 0
+                      const typeChar = () => {
+                        if (i < text.length) {
+                          element.value += text[i]
+                          element.dispatchEvent(new Event('input', { bubbles: true }))
+                          i++
+                          setTimeout(typeChar, ${typingDelay || 100})
+                        }
+                      }
+                      typeChar()
+                    ` : `
+                      element.value = '${text.replace(/'/g, "\\'").replace(/\n/g, '\\n')}'
+                      element.dispatchEvent(new Event('input', { bubbles: true }))
+                      element.dispatchEvent(new Event('change', { bubbles: true }))
+                    `}
+                  }
+                })()
+              `)
             } else {
-              // 如果没有目标元素，使用 keyboard.type
-              await this.page.keyboard.type(text, { delay: simulateTyping ? (typingDelay || 100) : 0 })
+              // 如果没有目标元素，使用 insertText
+              if (simulateTyping) {
+                for (const char of text) {
+                  this.webContents.insertText(char)
+                  await new Promise(resolve => setTimeout(resolve, typingDelay || 100))
+                }
+              } else {
+                this.webContents.insertText(text)
+              }
             }
           }
           break
@@ -831,7 +1026,7 @@ export class AutomationController {
 
       // 处理等待时间
       if (waitAfterInput && waitTimeout) {
-        await this.page.waitForTimeout(waitTimeout)
+        await new Promise(resolve => setTimeout(resolve, waitTimeout))
       }
     } catch (error) {
       console.error('键盘操作失败:', error)
@@ -853,32 +1048,81 @@ export class AutomationController {
     return modifierMap[modifier] || modifier
   }
 
+  // 辅助方法：获取键码
+  private getKeyCode(key: string): string {
+    const keyMap: { [key: string]: string } = {
+      'Enter': '\u000d',
+      'Tab': '\u0009',
+      'Escape': '\u001b',
+      'Backspace': '\u0008',
+      'Delete': '\u007f',
+      'ArrowUp': '\ue013',
+      'ArrowDown': '\ue015',
+      'ArrowLeft': '\ue012',
+      'ArrowRight': '\ue014',
+      'F1': '\ue031',
+      'F2': '\ue032',
+      'F3': '\ue033',
+      'F4': '\ue034',
+      'F5': '\ue035',
+      'F6': '\ue036',
+      'F7': '\ue037',
+      'F8': '\ue038',
+      'F9': '\ue039',
+      'F10': '\ue03a',
+      'F11': '\ue03b',
+      'F12': '\ue03c'
+    }
+    return keyMap[key] || key
+  }
+
   private async executeMouseNode(properties: NodeProperties) {
-    if (!this.page) return
+    if (!this.webContents) return
 
     const { actionType, selector, x, y } = properties
     switch (actionType) {
       case 'moveToElement':
         if (selector) {
-          await this.page.hover(selector)
+          // 使用 webContents.executeJavaScript 模拟鼠标悬停
+          await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                const event = new MouseEvent('mouseover', {
+                  bubbles: true,
+                  cancelable: true,
+                  view: window
+                })
+                element.dispatchEvent(event)
+                return true
+              }
+              return false
+            })()
+          `)
         }
         break
       case 'moveToPosition':
         if (typeof x === 'number' && typeof y === 'number') {
-          await this.page.mouse.move(x, y)
+          // 使用 webContents.sendInputEvent 发送鼠标移动事件
+          this.webContents.sendInputEvent({
+            type: 'mouseMove',
+            x: x,
+            y: y
+          })
         }
         break
     }
   }
 
   private async executeWaitNode(properties: NodeProperties) {
-    if (!this.page) return
+    if (!this.webContents) return
 
     const { waitType, timeout = 30, selector, selectorType, reverse } = properties
     
     switch (waitType) {
       case 'timeout':
-        await this.page.waitForTimeout(timeout * 1000)
+        await new Promise(resolve => setTimeout(resolve, timeout * 1000))
         break
       case 'visible':
       case 'exists':
@@ -910,66 +1154,156 @@ export class AutomationController {
 
           console.log(`等待元素: 类型=${waitType}, 选择器类型=${currentSelectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
 
-          if (waitType === 'visible') {
-            if (reverse) {
-              await this.page.waitForSelector(actualSelector, { state: 'hidden', timeout: timeout * 1000 })
-            } else {
-              await this.page.waitForSelector(actualSelector, { state: 'visible', timeout: timeout * 1000 })
+          // 使用 webContents.executeJavaScript 等待元素状态
+          await new Promise((resolve, reject) => {
+            const startTime = Date.now()
+            const checkCondition = async () => {
+              try {
+                if (!this.webContents) return;
+                let conditionMet = false
+                
+                if (waitType === 'visible') {
+                  conditionMet = await this.webContents.executeJavaScript(`
+                    (function() {
+                      const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+                      if (!element) return false
+                      const rect = element.getBoundingClientRect()
+                      const style = window.getComputedStyle(element)
+                      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+                    })()
+                  `)
+                } else if (waitType === 'exists') {
+                  conditionMet = await this.webContents.executeJavaScript(`
+                    (function() {
+                      return document.querySelector('${actualSelector.replace(/'/g, "\\'")}'') !== null
+                    })()
+                  `)
+                } else if (waitType === 'hidden') {
+                  conditionMet = await this.webContents.executeJavaScript(`
+                    (function() {
+                      const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+                      if (!element) return true
+                      const rect = element.getBoundingClientRect()
+                      const style = window.getComputedStyle(element)
+                      return style.display === 'none' || style.visibility === 'hidden' || (rect.width === 0 && rect.height === 0)
+                    })()
+                  `)
+                } else if (waitType === 'clickable') {
+                  conditionMet = await this.webContents.executeJavaScript(`
+                    (function() {
+                      const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+                      if (!element) return false
+                      const rect = element.getBoundingClientRect()
+                      const style = window.getComputedStyle(element)
+                      return !element.disabled && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+                    })()
+                  `)
+                }
+                
+                // 如果是反向条件，取反
+                if (reverse) {
+                  conditionMet = !conditionMet
+                }
+                
+                if (conditionMet) {
+                  resolve(void 0)
+                } else if (Date.now() - startTime > timeout * 1000) {
+                  reject(new Error(`等待元素 ${actualSelector} 状态 ${waitType} 超时`))
+                } else {
+                  setTimeout(checkCondition, 100)
+                }
+              } catch (error) {
+                reject(error)
+              }
             }
-          } else if (waitType === 'exists') {
-            if (reverse) {
-              await this.page.waitForSelector(actualSelector, { state: 'detached', timeout: timeout * 1000 })
-            } else {
-              await this.page.waitForSelector(actualSelector, { timeout: timeout * 1000 })
-            }
-          } else if (waitType === 'clickable') {
-            const element = await this.page.waitForSelector(actualSelector, { 
-              state: 'visible', 
-              timeout: timeout * 1000 
-            })
-            await element.waitForElementState('enabled', { timeout: timeout * 1000 })
-          }
+            checkCondition()
+          })
         }
         break
     }
   }
 
   private async executeScreenshotNode(properties: NodeProperties) {
-    if (!this.page) return
+    if (!this.webContents) return
 
     const { screenshotType, selector, path, omitBackground, quality } = properties
     if (!path) return
 
-    const options: any = {
-      path,
-      omitBackground: omitBackground || false,
-    }
-
-      // 只有 jpg/jpeg 格式支持 quality 选项
-    if (path.toLowerCase().endsWith('.jpg') || path.toLowerCase().endsWith('.jpeg')) {
-      options.quality = quality || 100
-    }
-
-    switch (screenshotType) {
-      case 'fullPage':
-        await this.page.screenshot({ ...options, fullPage: true })
-        break
-      case 'viewport':
-        await this.page.screenshot(options)
-        break
-      case 'element':
-        if (selector) {
-          const element = await this.page.$(selector)
-          if (element) {
-            await element.screenshot(options)
+    try {
+      let image: Electron.NativeImage
+      
+      switch (screenshotType) {
+        case 'fullPage':
+        case 'viewport':
+          // 使用 webContents.capturePage 截取页面
+          image = await this.webContents.capturePage()
+          break
+        case 'element':
+          if (selector) {
+            // 获取元素位置和大小
+            const elementRect = await this.webContents.executeJavaScript(`
+              (function() {
+                const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+                if (!element) return null
+                const rect = element.getBoundingClientRect()
+                return {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height
+                }
+              })()
+            `)
+            
+            if (elementRect) {
+              // 截取指定区域
+              image = await this.webContents.capturePage({
+                x: Math.round(elementRect.x),
+                y: Math.round(elementRect.y),
+                width: Math.round(elementRect.width),
+                height: Math.round(elementRect.height)
+              })
+            } else {
+              throw new Error(`找不到选择器: ${selector}`)
+            }
+          } else {
+            throw new Error('元素截图需要提供选择器')
           }
-        }
-        break
+          break
+        default:
+          throw new Error(`不支持的截图类型: ${screenshotType}`)
+      }
+      
+      // 保存图片
+      const fs = require('fs')
+      const pathModule = require('path')
+      
+      // 确保目录存在
+      const dir = pathModule.dirname(path)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      
+      // 根据文件扩展名保存不同格式
+      if (path.toLowerCase().endsWith('.png')) {
+        fs.writeFileSync(path, image.toPNG())
+      } else if (path.toLowerCase().endsWith('.jpg') || path.toLowerCase().endsWith('.jpeg')) {
+        const jpegOptions = { quality: quality || 100 }
+        fs.writeFileSync(path, image.toJPEG(jpegOptions.quality))
+      } else {
+        // 默认保存为 PNG
+        fs.writeFileSync(path, image.toPNG())
+      }
+      
+      console.log(`截图已保存到: ${path}`)
+    } catch (error) {
+      console.error('截图失败:', error)
+      throw new Error(`截图失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
   private async executeSwitchNode(properties: NodeProperties, node: FlowNode, nodes: FlowNode[]) {
-    if (!this.page) return
+    if (!this.webContents) return
 
     const { condition, selector, value } = properties
     if (!selector) return
@@ -977,47 +1311,105 @@ export class AutomationController {
     let result = false
     switch (condition) {
       case 'exists':
-        result = await this.page.$(selector) !== null
+        result = await this.webContents.executeJavaScript(`
+          (function() {
+            return document.querySelector('${selector.replace(/'/g, "\\'")}'') !== null
+          })()
+        `)
         break
       case 'notExists':
-        result = await this.page.$(selector) === null
+        result = await this.webContents.executeJavaScript(`
+          (function() {
+            return document.querySelector('${selector.replace(/'/g, "\\'")}'') === null
+          })()
+        `)
         break
       case 'visible':
-        result = await this.page.isVisible(selector)
+        result = await this.webContents.executeJavaScript(`
+          (function() {
+            const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+            if (!element) return false
+            const rect = element.getBoundingClientRect()
+            const style = window.getComputedStyle(element)
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+          })()
+        `)
         break
       case 'notVisible':
-        result = !await this.page.isVisible(selector)
+        result = await this.webContents.executeJavaScript(`
+          (function() {
+            const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+            if (!element) return true
+            const rect = element.getBoundingClientRect()
+            const style = window.getComputedStyle(element)
+            return style.display === 'none' || style.visibility === 'hidden' || (rect.width === 0 && rect.height === 0)
+          })()
+        `)
         break
       case 'clickable':
-        const element = await this.page.$(selector)
-        result = element ? await element.isEnabled() : false
+        result = await this.webContents.executeJavaScript(`
+          (function() {
+            const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+            if (!element) return false
+            const rect = element.getBoundingClientRect()
+            const style = window.getComputedStyle(element)
+            return !element.disabled && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+          })()
+        `)
         break
       case 'notClickable':
-        const el = await this.page.$(selector)
-        result = el ? !await el.isEnabled() : true
+        result = await this.webContents.executeJavaScript(`
+          (function() {
+            const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+            if (!element) return true
+            const rect = element.getBoundingClientRect()
+            const style = window.getComputedStyle(element)
+            return element.disabled || style.display === 'none' || style.visibility === 'hidden' || (rect.width === 0 && rect.height === 0)
+          })()
+        `)
         break
       case 'textContains':
         if (value) {
-          const text = await this.page.textContent(selector)
-          result = text?.includes(value) || false
+          result = await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+              const text = element ? element.textContent : null
+              return text ? text.includes('${value.replace(/'/g, "\\'").replace(/\n/g, '\\n')}') : false
+            })()
+          `)
         }
         break
       case 'textNotContains':
         if (value) {
-          const text = await this.page.textContent(selector)
-          result = !text?.includes(value)
+          result = await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+              const text = element ? element.textContent : null
+              return text ? !text.includes('${value.replace(/'/g, "\\'").replace(/\n/g, '\\n')}') : true
+            })()
+          `)
         }
         break
       case 'textEquals':
         if (value) {
-          const text = await this.page.textContent(selector)
-          result = text === value
+          result = await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+              const text = element ? element.textContent : null
+              return text === '${value.replace(/'/g, "\\'").replace(/\n/g, '\\n')}'
+            })()
+          `)
         }
         break
       case 'textNotEquals':
         if (value) {
-          const text = await this.page.textContent(selector)
-          result = text !== value
+          result = await this.webContents.executeJavaScript(`
+            (function() {
+              const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+              const text = element ? element.textContent : null
+              return text !== '${value.replace(/'/g, "\\'").replace(/\n/g, '\\n')}'
+            })()
+          `)
         }
         break
     }
@@ -1041,7 +1433,7 @@ export class AutomationController {
   }
 
   private async executeLoopNode(properties: NodeProperties, node: FlowNode, nodes: FlowNode[]) {
-    if (!this.page) return
+    if (!this.webContents) return
 
     const { loopType, count, selector, condition } = properties
     const childNodes = nodes.filter(n => n.properties.parentId === node.id)
@@ -1063,7 +1455,14 @@ export class AutomationController {
 
       case 'elements':
         if (selector) {
-          const elements = await this.page.$$(selector)
+          const elements = await this.webContents.executeJavaScript(`
+            Array.from(document.querySelectorAll('${selector.replace(/'/g, "\\'")}')).map((el, index) => ({
+              index,
+              tagName: el.tagName,
+              id: el.id,
+              className: el.className
+            }))
+          `)
           for (let i = 0; i < elements.length; i++) {
             if (!this.isRunning) break
             const element = elements[i]
@@ -1106,27 +1505,43 @@ export class AutomationController {
   }
 
   private async checkLoopCondition(condition: string, selector: string): Promise<boolean> {
-    if (!this.page) return false
+    if (!this.webContents) return false
 
     switch (condition) {
       case 'exists':
-        return await this.page.$(selector) !== null
+        return await this.webContents.executeJavaScript(`
+          document.querySelector('${selector.replace(/'/g, "\\'")}')
+        `) !== null
       case 'visible':
-        return await this.page.isVisible(selector)
+        return await this.webContents.executeJavaScript(`
+          const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+          if (!element) return false
+          const rect = element.getBoundingClientRect()
+          const style = window.getComputedStyle(element)
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+        `)
       case 'hidden':
-        return !(await this.page.isVisible(selector))
+        return !(await this.webContents.executeJavaScript(`
+          const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+          if (!element) return false
+          const rect = element.getBoundingClientRect()
+          const style = window.getComputedStyle(element)
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+        `))
       case 'clickable':
-        const element = await this.page.$(selector)
-        if (!element) return false
-        return await element.isEnabled()
+        return await this.webContents.executeJavaScript(`
+          const element = document.querySelector('${selector.replace(/'/g, "\\'")}')
+          if (!element) return false
+          return !element.disabled && element.offsetParent !== null
+        `)
       default:
         return false
     }
   }
 
   async startElementPicker(): Promise<{ selector: string; selectorType: string }> {
-    if (!this.page) throw new Error('浏览器未启动')
-    if (this.page.isClosed()) throw new Error('页面已关闭')
+    if (!this.webContents) throw new Error('浏览器未启动')
+    if (this.webContents.isDestroyed()) throw new Error('页面已关闭')
     if (this.pickerPromiseState === 'pending') throw new Error('已有正在进行的元素选择')
 
     this.pickerPromiseState = 'pending'
@@ -1134,14 +1549,14 @@ export class AutomationController {
     this.pickerLock = true
 
     try {
-      if (!this.page.isClosed()) {
-        await this.page.evaluate(() => {
+      if (!this.webContents.isDestroyed()) {
+        await this.webContents.executeJavaScript(`
           if (window._elementPicker) {
             window._elementPicker.disable()
           }
-        })
+        `)
 
-        await this.page.evaluate(() => {
+        await this.webContents.executeJavaScript(`
           window._elementPicker = {
             enabled: false,
             hoveredElement: null,
@@ -1270,7 +1685,7 @@ export class AutomationController {
                   }
 
                   // 如果类组合不唯一，尝试与标签名组合
-                  const tagWithClass = `${element.tagName.toLowerCase()}.${classes.join('.')}`
+                  const tagWithClass = element.tagName.toLowerCase() + '.' + classes.join('.')
                   const elementsWithTag = document.querySelectorAll(tagWithClass)
                   if (elementsWithTag.length === 1 && elementsWithTag[0] === element) {
                     return { selector: tagWithClass, selectorType: 'css' }
@@ -1291,16 +1706,16 @@ export class AutomationController {
                 const index = siblings.indexOf(current) + 1
                 
                 // 尝试使用 id
-                if (current.id) {
-                  path.unshift(`#${current.id}`)
-                  break
-                }
+                  if (current.id) {
+                    path.unshift('#' + current.id)
+                    break
+                  }
                 
                 // 尝试使用 class
                 if (current.className && typeof current.className === 'string') {
                   const classes = current.className.trim().split(/\s+/).filter(Boolean)
                   if (classes.length > 0) {
-                    const classSelector = `${tag}${classes.map(c => `.${c}`).join('')}:nth-child(${index})`
+                    const classSelector = tag + classes.map(c => '.' + c).join('') + ':nth-child(' + index + ')'
                     const elements = document.querySelectorAll(classSelector)
                     if (elements.length === 1 && elements[0] === current) {
                       path.unshift(classSelector)
@@ -1310,7 +1725,7 @@ export class AutomationController {
                 }
                 
                 // 使用标签名和索引
-                path.unshift(`${tag}:nth-child(${index})`)
+                path.unshift(tag + ':nth-child(' + index + ')')
                 
                 // 更新循环变量
                 current = parent
@@ -1342,7 +1757,7 @@ export class AutomationController {
                 let selector = current.tagName.toLowerCase()
                 
                 if (current.id) {
-                  selector = `#${current.id}`
+                  selector = '#' + current.id
                   path.unshift(selector)
                   break
                 } else {
@@ -1353,7 +1768,7 @@ export class AutomationController {
                     if (sibling.tagName === current.tagName) nth++
                   }
                   
-                  if (nth > 1) selector += `:nth-of-type(${nth})`
+                  if (nth > 1) selector += ':nth-of-type(' + nth + ')'
                 }
                 
                 path.unshift(selector)
@@ -1375,14 +1790,14 @@ export class AutomationController {
               }, '*')
             }
           })
-        })
+        `)
 
-        const result = await this.page.evaluate(() => {
-          return new Promise<{ selector: string, selectorType: string }>((resolve, reject) => {
-            let timeoutId: number | null = null
+        const result = await this.webContents.executeJavaScript(`
+          return new Promise((resolve, reject) => {
+            let timeoutId = null
             let isResolved = false
 
-            const handler = (event: MessageEvent) => {
+            const handler = (event) => {
               if (event.data?.type === 'ELEMENT_SELECTED') {
                 cleanup()
                 isResolved = true
@@ -1417,7 +1832,7 @@ export class AutomationController {
               }
             }, 300000)
           })
-        })
+        `)
 
         this.pickerPromiseState = 'resolved'
         return result
@@ -1428,12 +1843,12 @@ export class AutomationController {
     } catch (error) {
       this.pickerPromiseState = 'rejected'
       try {
-        if (this.page && !this.page.isClosed()) {
-          await this.page.evaluate(() => {
+        if (this.webContents && !this.webContents.isDestroyed()) {
+          await this.webContents.executeJavaScript(`
             if (window._elementPicker) {
               window._elementPicker.disable()
             }
-          })
+          `)
         }
       } catch (cleanupError) {
         // 忽略清理错误
@@ -1449,7 +1864,7 @@ export class AutomationController {
   }
 
   private async executeInputNode(properties: NodeProperties) {
-    if (!this.page) throw new Error('浏览器未启动')
+    if (!this.webContents) throw new Error('浏览器未启动')
 
     const {
       selectorType,
@@ -1469,105 +1884,119 @@ export class AutomationController {
 
       // 根据选择器类型构建实际的选择器
       let actualSelector = selector;
-      let locator: Locator;
 
       switch (selectorType) {
         case 'id':
           actualSelector = `#${selector}`; // 始终添加#前缀
-          locator = this.page.locator(actualSelector);
           break;
         case 'class':
           actualSelector = `.${selector}`; // 始终添加.前缀
-          locator = this.page.locator(actualSelector);
           break;
         case 'name':
           actualSelector = `[name="${selector}"]`; // 始终使用属性选择器格式
-          locator = this.page.locator(actualSelector);
           break;
         case 'xpath':
-          locator = this.page.locator(selector);
+          // XPath 需要转换为 CSS 选择器或使用 evaluate
           break;
         default:
           // CSS选择器
-          locator = this.page.locator(selector);
+          break;
       }
       
       console.log(`输入文本: 选择器类型=${selectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
 
-      // 尝试多种定位策略
-      if (await locator.count() === 0) {
+      // 检查元素是否存在
+      const elementExists = await this.webContents.executeJavaScript(`
+        document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+      `) !== null
+      
+      if (!elementExists) {
         console.log('未找到元素，尝试使用备用选择器');
         
         // 如果有元素ID，尝试使用ID
         if (selector.includes('id=') || selector.includes('#')) {
           const idSelector = selector.includes('#') ? selector : `#${selector.replace('id=', '')}`;
-          locator = this.page.locator(idSelector);
+          actualSelector = idSelector;
         }
         
         // 检查是否找到元素
-        if (await locator.count() === 0) {
+        const fallbackExists = await this.webContents.executeJavaScript(`
+          document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+        `) !== null
+        
+        if (!fallbackExists) {
           // 最后尝试使用input标签
-          locator = this.page.locator('input');
-          console.log(`尝试定位任何输入框，找到 ${await locator.count()} 个元素`);
+          actualSelector = 'input';
+          console.log('尝试定位任何输入框');
         }
       }
       
-      // 等待元素可见
-      console.log('等待元素可见...');
-      await locator.first().waitFor({ state: 'visible', timeout: 5000 }).catch(e => {
-        console.warn('等待元素可见超时，尝试继续操作', e);
-      });
-
-      // 确保元素在视图中
-      console.log('将元素滚动到视图中...');
-      await locator.first().scrollIntoViewIfNeeded().catch(e => {
-        console.warn('滚动元素到视图失败，尝试继续操作', e);
-      });
+      // 等待元素可见并滚动到视图中
+      console.log('等待元素可见并滚动到视图中...');
+      await this.webContents.executeJavaScript(`
+        const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return true
+        }
+        return false
+      `)
 
       // 如果需要清除原有内容
       if (clearFirst) {
         console.log('清除输入框现有内容...');
-        await locator.first().click({ timeout: 5000 }).catch(() => {}); // 点击元素激活
-        await locator.first().clear({ timeout: 5000 }).catch(() => {}); // 清除内容
+        await this.webContents.executeJavaScript(`
+          const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+          if (element) {
+            element.focus()
+            element.select()
+            element.value = ''
+          }
+        `)
       }
 
       // 输入文本
       console.log(`使用${simulateTyping ? '模拟输入' : '直接填充'}方式输入文本...`);
       if (simulateTyping) {
-        // 添加重试机制
-        let retries = 3;
-        let success = false;
-        
-        while (retries > 0 && !success) {
-          try {
-            await locator.first().type(text, { 
-              delay: typingDelay, 
-              timeout: 10000 
-            });
-            success = true;
-          } catch (e) {
-            console.warn(`第${4-retries}次输入尝试失败:`, e);
-            retries--;
-            if (retries > 0) {
-              await this.page.waitForTimeout(1000); // 等待一秒再试
+        // 模拟逐字符输入
+        await this.webContents.executeJavaScript(`
+          const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+          if (element) {
+            element.focus()
+            const text = '${text.replace(/'/g, "\\'").replace(/\\/g, '\\\\')}';
+            let currentValue = element.value || '';
+            
+            for (let i = 0; i < text.length; i++) {
+              currentValue += text[i];
+              element.value = currentValue;
+              
+              // 触发输入事件
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+              element.dispatchEvent(new Event('change', { bubbles: true }));
+              
+              // 模拟输入延迟
+              await new Promise(resolve => setTimeout(resolve, ${typingDelay || 50}));
             }
           }
-        }
-        
-        if (!success) {
-          throw new Error('多次尝试输入文本失败');
-        }
+        `)
       } else {
-        await locator.first().fill(text, { timeout: 10000 }).catch(async e => {
-          console.warn('直接填充失败，尝试模拟输入:', e);
-          await locator.first().type(text, { delay: 50, timeout: 10000 });
-        });
+        await this.webContents.executeJavaScript(`
+          const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+          if (element) {
+            element.focus()
+            element.value = '${text.replace(/'/g, "\\'").replace(/\\/g, '\\\\')}'
+            
+            // 触发输入事件
+            element.dispatchEvent(new Event('input', { bubbles: true }))
+            element.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+        `)
       }
 
       // 等待输入完成
       if (waitAfterInput && waitTimeout) {
         console.log(`等待${waitTimeout}秒...`);
-        await this.page.waitForTimeout(waitTimeout * 1000);
+        await new Promise(resolve => setTimeout(resolve, waitTimeout * 1000))
       }
 
       console.log('输入操作完成');
@@ -1579,7 +2008,7 @@ export class AutomationController {
   }
 
   private async executeScrollNode(properties: NodeProperties) {
-    if (!this.page) return
+    if (!this.webContents) return
 
     const { actionType, selector, selectorType, x, y, smooth, waitForScroll, timeout = 30 } = properties
 
@@ -1612,17 +2041,19 @@ export class AutomationController {
 
             console.log(`滚动到元素: 选择器类型=${currentSelectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
             
-            // 等待元素存在
-            await this.page.waitForSelector(actualSelector, { timeout: timeout * 1000 })
-            
             // 执行滚动
-            await this.page.$eval(actualSelector, (el: HTMLElement, smooth: boolean) => {
-              el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
-            }, smooth || false)
+            await this.webContents.executeJavaScript(`
+              const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+              if (element) {
+                element.scrollIntoView({ behavior: '${smooth ? 'smooth' : 'auto'}' })
+                return true
+              }
+              return false
+            `)
 
             // 如果需要等待滚动完成
             if (waitForScroll) {
-              await this.page.waitForTimeout(1000) // 给予滚动动画完成的时间
+              await new Promise(resolve => setTimeout(resolve, 1000)) // 给予滚动动画完成的时间
             }
           }
           break
@@ -1630,53 +2061,50 @@ export class AutomationController {
         case 'scrollToPosition':
           if (typeof x === 'number' && typeof y === 'number') {
             // 执行滚动
-            await this.page.evaluate(
-              ({ x, y, smooth }: { x: number; y: number; smooth?: boolean }) => {
-                window.scrollTo({
-                  left: x,
-                  top: y,
-                  behavior: smooth ? 'smooth' : 'auto'
-                })
-              },
-              { x, y, smooth }
-            )
+            await this.webContents.executeJavaScript(`
+              window.scrollTo({
+                left: ${x},
+                top: ${y},
+                behavior: '${smooth ? 'smooth' : 'auto'}'
+              })
+            `)
 
             // 如果需要等待滚动完成
             if (waitForScroll) {
-              await this.page.waitForTimeout(1000) // 给予滚动动画完成的时间
+              await new Promise(resolve => setTimeout(resolve, 1000)) // 给予滚动动画完成的时间
             }
           }
           break
 
         case 'scrollToTop':
           // 滚动到顶部
-          await this.page.evaluate((smooth: boolean) => {
+          await this.webContents.executeJavaScript(`
             window.scrollTo({
               left: 0,
               top: 0,
-              behavior: smooth ? 'smooth' : 'auto'
+              behavior: '${smooth ? 'smooth' : 'auto'}'
             })
-          }, smooth || false)
+          `)
 
           // 如果需要等待滚动完成
           if (waitForScroll) {
-            await this.page.waitForTimeout(1000)
+            await new Promise(resolve => setTimeout(resolve, 1000))
           }
           break
 
         case 'scrollToBottom':
           // 滚动到底部
-          await this.page.evaluate((smooth: boolean) => {
+          await this.webContents.executeJavaScript(`
             window.scrollTo({
               left: 0,
               top: document.documentElement.scrollHeight,
-              behavior: smooth ? 'smooth' : 'auto'
+              behavior: '${smooth ? 'smooth' : 'auto'}'
             })
-          }, smooth || false)
+          `)
 
           // 如果需要等待滚动完成
           if (waitForScroll) {
-            await this.page.waitForTimeout(1000)
+            await new Promise(resolve => setTimeout(resolve, 1000))
           }
           break
       }
@@ -1686,7 +2114,7 @@ export class AutomationController {
   }
 
   async previewExtraction(properties: NodeProperties): Promise<string | any[]> {
-    if (!this.page) throw new Error('浏览器未启动')
+    if (!this.webContents) throw new Error('浏览器未启动')
 
     const { 
       selector, 
@@ -1720,28 +2148,21 @@ export class AutomationController {
         // xpath保持不变
       }
 
-      // 等待元素出现，增加超时时间到30秒，并添加更好的错误处理
-      try {
-        await this.page.waitForSelector(actualSelector, { 
-          timeout: 30000,
-          state: 'attached'
-        })
-      } catch (error: any) {
-        if (error.name === 'TimeoutError') {
-          throw new Error('未找到匹配的元素，请检查选择器是否正确')
-        }
-        throw error
+      // 检查元素是否存在
+      const elementExists = await this.webContents.executeJavaScript(`
+        document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+      `) !== null
+      
+      if (!elementExists) {
+        throw new Error('未找到匹配的元素，请检查选择器是否正确')
       }
-
-      // 确保页面已加载完成
-      await this.page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {})
 
       switch (extractType) {
         case 'text':
-          // 使用 $$eval 来提取所有匹配元素的文本
-          value = await this.page.$$eval(actualSelector, elements => 
-            elements.map(el => el.textContent?.trim() || '')
-          ).catch(error => {
+          // 提取所有匹配元素的文本
+          value = await this.webContents.executeJavaScript(`
+            Array.from(document.querySelectorAll('${actualSelector.replace(/'/g, "\\'")}')).map(el => el.textContent?.trim() || '')
+          `).catch(error => {
             throw new Error(`提取文本失败: ${error.message}`)
           })
           // 如果只有一个元素，返回单个值而不是数组
@@ -1751,18 +2172,21 @@ export class AutomationController {
           break
 
         case 'list':
-          value = await this.page.$$eval(actualSelector, (elements, extractHTML) => {
-            return elements.map(el => 
-              extractHTML ? el.innerHTML.trim() : el.textContent?.trim() || ''
+          value = await this.webContents.executeJavaScript(`
+            Array.from(document.querySelectorAll('${actualSelector.replace(/'/g, "\\'")}')).map(el => 
+              ${extractInnerHTML} ? el.innerHTML.trim() : el.textContent?.trim() || ''
             ).filter(text => text !== '') // 过滤掉空字符串
-          }, extractInnerHTML).catch(error => {
+          `).catch(error => {
             throw new Error(`提取列表失败: ${error.message}`)
           })
           break
 
         case 'attribute':
           if (attributeName) {
-            value = await this.page.getAttribute(actualSelector, attributeName)
+            value = await this.webContents.executeJavaScript(`
+              const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+              return element ? element.getAttribute('${attributeName}') : null
+            `)
             if (trimContent && typeof value === 'string') {
               value = value.trim()
             }
@@ -1770,7 +2194,12 @@ export class AutomationController {
           break
 
         case 'html':
-          value = await this.page.innerHTML(actualSelector)
+          value = await this.webContents.executeJavaScript(`
+            (() => {
+              const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
+              return element ? element.innerHTML : null
+            })()
+          `)
           if (trimContent && typeof value === 'string') {
             value = value.trim()
           }
@@ -1780,29 +2209,31 @@ export class AutomationController {
           const tableData: string[][] = []
           
           if (hasHeader && headerSelector) {
-            const headers = await this.page.$$eval(headerSelector, cells => 
-              cells.map(cell => cell.textContent?.trim() || '')
-            )
-            if (headers.length > 0) {
+            const headers = await this.webContents.executeJavaScript(`
+              (() => {
+                const cells = document.querySelectorAll('${headerSelector.replace(/'/g, "\\'")}')
+                return Array.from(cells).map(cell => cell.textContent?.trim() || '')
+              })()
+            `)
+            if (headers && headers.length > 0) {
               tableData.push(headers)
             }
           }
 
           if (rowSelector) {
-            const rows = await this.page.$$(rowSelector)
-            for (const row of rows) {
-              const cells = cellSelector 
-                ? await row.$$(cellSelector)
-                : await row.$$('td, th')
-              
-              const rowData = await Promise.all(
-                cells.map(async cell => {
-                  const text = await cell.textContent()
-                  return text?.trim() || ''
+            const tableRows = await this.webContents.executeJavaScript(`
+              (() => {
+                const rows = document.querySelectorAll('${rowSelector.replace(/'/g, "\\'")}')
+                const cellSel = '${cellSelector ? cellSelector.replace(/'/g, "\\'"): 'td, th'}'
+                return Array.from(rows).map(row => {
+                  const cells = row.querySelectorAll(cellSel)
+                  return Array.from(cells).map(cell => cell.textContent?.trim() || '')
                 })
-              )
-              
-              tableData.push(rowData)
+              })()
+            `)
+            
+            if (tableRows && Array.isArray(tableRows)) {
+              tableData.push(...tableRows)
             }
           }
           
@@ -1927,6 +2358,268 @@ export class AutomationController {
       throw new Error(`导出失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  /**
+   * 执行验证码识别节点
+   */
+  private async executeCaptchaNode(properties: NodeProperties) {
+    if (!this.webContents) throw new Error('浏览器未启动')
+
+    const {
+      provider = 'baidu',
+      apiKey,
+      secretKey,
+      apiUrl,
+      captchaSource = 'element',
+      captchaSelector,
+      screenshotType = 'viewport',
+      x = 0,
+      y = 0,
+      width = 300,
+      height = 100,
+      captchaType = 'normal',
+      resultVariable = 'captcha_result',
+      inputSelector,
+      autoInput = true,
+      timeout = 30,
+      retryCount = 2,
+      onFailure = 'manual',
+      saveImage = false,
+      imagePath = './captcha_images/'
+    } = properties
+
+    if (!apiKey) {
+      throw new Error('验证码识别需要配置API Key')
+    }
+
+    console.log(`开始验证码识别: 服务商=${provider}, 获取方式=${captchaSource}, 类型=${captchaType}`)
+
+    try {
+      // 动态导入验证码服务
+      const { CaptchaService } = await import('../src/services/captcha-service')
+      
+      const captchaService = new CaptchaService({
+        provider: provider as any,
+        apiKey,
+        secretKey,
+        apiUrl,
+        timeout: timeout * 1000
+      })
+
+      let imageData: Buffer | null = null
+      let attempts = 0
+      let recognitionResult: any = null
+
+      // 重试机制
+      while (attempts <= retryCount && !recognitionResult?.success) {
+        attempts++
+        console.log(`验证码识别尝试 ${attempts}/${retryCount + 1}`)
+
+        try {
+          // 获取验证码图片
+          switch (captchaSource) {
+            case 'element':
+              if (!captchaSelector) {
+                throw new Error('元素截图需要提供验证码选择器')
+              }
+              
+              // 等待验证码元素出现并截图
+              const elementExists = await this.webContents.executeJavaScript(`
+                (() => {
+                  const element = document.querySelector('${captchaSelector.replace(/'/g, "\\'")}');
+                  return element && element.offsetParent !== null;
+                })()
+              `);
+              
+              if (!elementExists) {
+                throw new Error('验证码元素不存在或不可见');
+              }
+              
+              // 使用 webContents.capturePage 截取整个页面，然后裁剪元素区域
+              const rect = await this.webContents.executeJavaScript(`
+                (() => {
+                  const element = document.querySelector('${captchaSelector.replace(/'/g, "\\'")}');
+                  if (!element) return null;
+                  const rect = element.getBoundingClientRect();
+                  return {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height
+                  };
+                })()
+              `);
+              
+              if (rect) {
+                const fullImage = await this.webContents.capturePage();
+                // 这里需要裁剪图片，但 Electron 的 capturePage 返回的是 NativeImage
+                // 暂时使用全页面截图
+                imageData = fullImage.toPNG();
+              }
+              break
+
+            case 'screenshot':
+              // 全页面截图
+              const fullImage = await this.webContents.capturePage();
+              imageData = fullImage.toPNG();
+              break
+
+            case 'upload':
+              throw new Error('上传图片模式需要在前端实现')
+
+            default:
+              throw new Error(`不支持的验证码获取方式: ${captchaSource}`)
+          }
+
+          if (!imageData) {
+            throw new Error('获取验证码图片失败')
+          }
+
+          // 保存图片（如果需要）
+          if (saveImage) {
+            const fs = require('fs')
+            const path = require('path')
+            
+            // 确保目录存在
+            const saveDir = path.resolve(imagePath)
+            if (!fs.existsSync(saveDir)) {
+              fs.mkdirSync(saveDir, { recursive: true })
+            }
+            
+            const fileName = `captcha_${Date.now()}.png`
+            const filePath = path.join(saveDir, fileName)
+            fs.writeFileSync(filePath, imageData)
+            console.log(`验证码图片已保存: ${filePath}`)
+          }
+
+          // 调用识别服务
+          recognitionResult = await captchaService.recognize(imageData, captchaType)
+          
+          if (recognitionResult.success && recognitionResult.text) {
+            console.log(`验证码识别成功: ${recognitionResult.text}`)
+            
+            // 存储结果到变量
+            if (!this.variables) {
+              this.variables = new Map()
+            }
+            this.variables.set(resultVariable, recognitionResult.text)
+            
+            // 自动输入（如果配置了）
+            if (autoInput && inputSelector && captchaType === 'normal') {
+              try {
+                const inputSuccess = await this.webContents.executeJavaScript(`
+                  (() => {
+                    const input = document.querySelector('${inputSelector.replace(/'/g, "\\'")}');
+                    if (!input) return false;
+                    
+                    input.focus();
+                    input.value = '${recognitionResult.text.replace(/'/g, "\\'")}' ;
+                    
+                    // 触发输入事件
+                    const inputEvent = new Event('input', { bubbles: true });
+                    const changeEvent = new Event('change', { bubbles: true });
+                    input.dispatchEvent(inputEvent);
+                    input.dispatchEvent(changeEvent);
+                    
+                    return true;
+                  })()
+                `);
+                
+                if (inputSuccess) {
+                  console.log(`验证码已自动输入到: ${inputSelector}`);
+                } else {
+                  throw new Error('输入元素不存在');
+                }
+              } catch (inputError) {
+                console.warn(`自动输入验证码失败: ${inputError}`);
+                // 输入失败不影响识别结果
+              }
+            }
+            
+            break // 识别成功，退出重试循环
+          } else {
+            console.warn(`验证码识别失败 (尝试 ${attempts}): ${recognitionResult.error || '未知错误'}`)
+            
+            // 如果不是最后一次尝试，等待一段时间再重试
+            if (attempts <= retryCount) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        } catch (attemptError: any) {
+          console.error(`验证码识别尝试 ${attempts} 出错:`, attemptError)
+          
+          // 如果不是最后一次尝试，等待一段时间再重试
+          if (attempts <= retryCount) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
+
+      // 处理最终结果
+      if (!recognitionResult?.success) {
+        const errorMsg = `验证码识别失败，已尝试 ${attempts} 次`
+        
+        switch (onFailure) {
+          case 'stop':
+            throw new Error(errorMsg)
+          
+          case 'continue':
+            console.warn(`${errorMsg}，继续执行流程`)
+            // 设置空结果
+            if (!this.variables) {
+              this.variables = new Map()
+            }
+            this.variables.set(resultVariable, '')
+            break
+          
+          case 'manual':
+            console.log(`${errorMsg}，等待人工处理`)
+            
+            // 通知前端显示人工处理界面
+            const { BrowserWindow } = require('electron')
+            const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+            
+            if (win) {
+              win.webContents.send('automation:manual-captcha', {
+                message: '验证码识别失败，请人工处理',
+                imageData: imageData?.toString('base64'),
+                resultVariable,
+                inputSelector
+              })
+              
+              // 等待人工处理完成的信号
+              // 这里可以实现一个等待机制
+              console.log('等待人工处理验证码...')
+            }
+            break
+        }
+      }
+
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      console.error('验证码识别节点执行失败:', errorMessage)
+      throw new Error(`验证码识别失败: ${errorMessage}`)
+    }
+  }
+
+
+
+  /**
+   * 获取变量值
+   */
+  getVariable(name: string): any {
+    return this.variables?.[name]
+  }
+
+  /**
+   * 设置变量值
+   */
+  setVariable(name: string, value: any): void {
+    if (!this.variables) {
+      this.variables = new Map()
+    }
+    this.variables.set(name, value)
+  }
 }   
 
 // 扩展 window 接口
@@ -1946,4 +2639,4 @@ declare global {
       getFullPath(element: HTMLElement): string
     }
   }
-} 
+}

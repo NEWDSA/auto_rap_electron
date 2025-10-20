@@ -30,6 +30,7 @@
     "@types/uuid": "^10.0.0",
     "@vueuse/core": "^10.7.1",
     "aws-sdk": "^2.1692.0",
+    "axios": "^1.6.0",
     "docx": "^9.2.0",
     "element-plus": "2.5.0",
     "exceljs": "^4.4.0",

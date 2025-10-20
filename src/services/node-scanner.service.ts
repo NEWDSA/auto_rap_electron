@@ -36,7 +36,8 @@ export class NodeScannerService {
       this.scanMouseNode(),
       this.scanConditionNode(),
       this.scanLoopNode(),
-      this.scanExportNode()
+      this.scanExportNode(),
+      this.scanCaptchaNode()
     ]
   }
 
@@ -699,6 +700,144 @@ export class NodeScannerService {
           description: '保存模式',
           options: ['auto', 'select', 'overwrite'],
           defaultValue: 'auto'
+        }
+      ]
+    }
+  }
+
+  /**
+   * 扫描验证码识别节点
+   */
+  private scanCaptchaNode(): NodeTypeInfo {
+    return {
+      type: 'captcha',
+      name: '验证码识别',
+      description: '使用第三方API识别验证码图片，支持多种验证码类型和识别服务商',
+      category: 'AI识别',
+      parameters: [
+        {
+          name: 'provider',
+          type: 'select',
+          description: '验证码识别服务商',
+          required: true,
+          options: ['baidu', 'tencent', 'aliyun', 'youdao', 'jingfeng', 'tutu', 'custom'],
+          defaultValue: 'baidu'
+        },
+        {
+          name: 'apiKey',
+          type: 'string',
+          description: 'API密钥',
+          required: true
+        },
+        {
+          name: 'secretKey',
+          type: 'string',
+          description: 'API密钥（部分服务商需要）'
+        },
+        {
+          name: 'apiUrl',
+          type: 'string',
+          description: '自定义API地址（选择custom服务商时必填）'
+        },
+        {
+          name: 'captchaSource',
+          type: 'select',
+          description: '验证码获取方式',
+          required: true,
+          options: ['element', 'screenshot', 'upload'],
+          defaultValue: 'element'
+        },
+        {
+          name: 'captchaSelector',
+          type: 'string',
+          description: '验证码元素选择器（元素截图模式必填）'
+        },
+        {
+          name: 'screenshotType',
+          type: 'select',
+          description: '截图类型（截图模式时使用）',
+          options: ['viewport', 'fullpage', 'custom'],
+          defaultValue: 'viewport'
+        },
+        {
+          name: 'x',
+          type: 'number',
+          description: '自定义截图区域X坐标',
+          defaultValue: 0
+        },
+        {
+          name: 'y',
+          type: 'number',
+          description: '自定义截图区域Y坐标',
+          defaultValue: 0
+        },
+        {
+          name: 'width',
+          type: 'number',
+          description: '自定义截图区域宽度',
+          defaultValue: 300
+        },
+        {
+          name: 'height',
+          type: 'number',
+          description: '自定义截图区域高度',
+          defaultValue: 100
+        },
+        {
+          name: 'captchaType',
+          type: 'select',
+          description: '验证码类型',
+          required: true,
+          options: ['normal', 'click', 'slide', 'rotate', 'select'],
+          defaultValue: 'normal'
+        },
+        {
+          name: 'resultVariable',
+          type: 'string',
+          description: '结果存储变量名',
+          defaultValue: 'captcha_result'
+        },
+        {
+          name: 'inputSelector',
+          type: 'string',
+          description: '验证码输入框选择器（自动输入时使用）'
+        },
+        {
+          name: 'autoInput',
+          type: 'boolean',
+          description: '是否自动输入识别结果',
+          defaultValue: true
+        },
+        {
+          name: 'timeout',
+          type: 'number',
+          description: '识别超时时间（秒）',
+          defaultValue: 30
+        },
+        {
+          name: 'retryCount',
+          type: 'number',
+          description: '识别失败重试次数',
+          defaultValue: 2
+        },
+        {
+          name: 'onFailure',
+          type: 'select',
+          description: '识别失败时的处理方式',
+          options: ['stop', 'continue', 'manual'],
+          defaultValue: 'manual'
+        },
+        {
+          name: 'saveImage',
+          type: 'boolean',
+          description: '是否保存验证码图片',
+          defaultValue: false
+        },
+        {
+          name: 'imagePath',
+          type: 'string',
+          description: '图片保存路径',
+          defaultValue: './captcha_images/'
         }
       ]
     }

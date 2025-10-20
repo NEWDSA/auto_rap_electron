@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
+import { exec } from 'child_process'
 import { AutomationController } from './automation-controller'
 import fs from 'fs'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
@@ -249,7 +250,7 @@ ipcMain.handle('element:startPicker', async () => {
     const browser = automationController.getCurrentBrowser()
     const page = automationController.getCurrentPage()
     
-    if (!browser || !browser.isConnected()) {
+    if (!browser || browser.isDestroyed()) {
       // 如果没有活动的浏览器实例，创建一个新的
       await automationController.initBrowser({
         headless: false,
@@ -259,7 +260,7 @@ ipcMain.handle('element:startPicker', async () => {
 
     // 获取当前页面
     const currentPage = automationController.getCurrentPage()
-    if (!currentPage || currentPage.isClosed()) {
+    if (!currentPage || currentPage.isDestroyed()) {
       throw new Error('无法获取有效的页面，请确保浏览器已打开')
     }
 
@@ -395,8 +396,6 @@ ipcMain.handle('open-browser', async (_, options) => {
       url: options.url,
       width: options.width,
       height: options.height,
-      headless: options.headless || false,
-      incognito: options.incognito,
       userAgent: options.userAgent
     });
     
@@ -795,6 +794,47 @@ ipcMain.handle('get-stats', async () => {
       todayExecutions: 0,
       successRate: 0
     }
+  }
+})
+
+// 系统电源控制（仅在受支持的平台执行）
+ipcMain.handle('system:power', async (_event, payload) => {
+  try {
+    const { action, force } = (payload || {}) as { action: 'shutdown' | 'restart' | 'sleep' | 'lock'; force?: boolean }
+
+    if (process.platform === 'win32') {
+      let cmd = ''
+      switch (action) {
+        case 'shutdown':
+          cmd = `shutdown /s ${force ? '/f ' : ''}/t 0`
+          break
+        case 'restart':
+          cmd = `shutdown /r ${force ? '/f ' : ''}/t 0`
+          break
+        case 'sleep':
+          // 注意：睡眠可能受系统休眠/快速启动设置影响
+          cmd = 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0'
+          break
+        case 'lock':
+          cmd = 'rundll32.exe user32.dll,LockWorkStation'
+          break
+        default:
+          return { success: false, error: '不支持的操作' }
+      }
+
+      exec(cmd, (error) => {
+        if (error) {
+          console.error('执行电源命令失败:', error)
+        }
+      })
+
+      return { success: true }
+    }
+
+    // 其他平台可按需扩展（macOS/Linux）
+    return { success: false, error: `当前平台不支持: ${process.platform}` }
+  } catch (error: any) {
+    return { success: false, error: error?.message || '电源操作失败' }
   }
 })
 

@@ -123,12 +123,16 @@ export interface NodeProperties {
   encoding?: string
   saveMode?: 'auto' | 'select'
 
+  // 电源控制相关属性
+  action?: 'lock' | 'sleep' | 'restart' | 'shutdown'
+  force?: boolean
+
   [key: string]: any
 }
 
 export interface FlowNode {
   id: string
-  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export'
+  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' | 'power'
   x: number
   y: number
   text: string

@@ -59,8 +59,8 @@ export class FlowGenerator {
   /**
    * 规范化节点类型
    */
-  private normalizeNodeType(type: string): 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' {
-    const typeMap: Record<string, 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export'> = {
+  private normalizeNodeType(type: string): 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' {
+    const typeMap: Record<string, 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha'> = {
       'browser': 'browser',
       'click': 'click',
       'input': 'input',
@@ -73,7 +73,10 @@ export class FlowGenerator {
       'switch': 'switch',
       'condition': 'switch',
       'loop': 'loop',
-      'export': 'export'
+      'export': 'export',
+      'captcha': 'captcha',
+      '验证码': 'captcha',
+      '识别': 'captcha'
     }
     
     return typeMap[type.toLowerCase()] || 'browser'
@@ -169,6 +172,92 @@ export class FlowGenerator {
           params.loopType = 'condition'
         }
         break
+        
+      case 'captcha':
+        // 提取验证码识别参数
+        
+        // 识别服务商
+        if (description.includes('百度')) {
+          params.provider = 'baidu'
+        } else if (description.includes('腾讯')) {
+          params.provider = 'tencent'
+        } else if (description.includes('阿里')) {
+          params.provider = 'aliyun'
+        } else {
+          params.provider = 'baidu' // 默认使用百度
+        }
+        
+        // 验证码类型
+        if (description.includes('点击') || description.includes('click')) {
+          params.captchaType = 'click'
+        } else if (description.includes('滑动') || description.includes('slide')) {
+          params.captchaType = 'slide'
+        } else if (description.includes('旋转') || description.includes('rotate')) {
+          params.captchaType = 'rotate'
+        } else if (description.includes('选择') || description.includes('select')) {
+          params.captchaType = 'select'
+        } else {
+          params.captchaType = 'normal'
+        }
+        
+        // 获取方式
+        if (description.includes('截图') || description.includes('screenshot')) {
+          params.captchaSource = 'screenshot'
+        } else if (description.includes('上传') || description.includes('upload')) {
+          params.captchaSource = 'upload'
+        } else {
+          params.captchaSource = 'element'
+        }
+        
+        // 提取验证码选择器
+        const captchaSelectorMatch = description.match(/验证码选择器[:：]\s*([^,，]+)/)
+        if (captchaSelectorMatch) {
+          params.captchaSelector = captchaSelectorMatch[1].trim()
+        }
+        
+        // 提取输入框选择器
+        const inputSelectorMatch = description.match(/输入框选择器[:：]\s*([^,，]+)/)
+        if (inputSelectorMatch) {
+          params.inputSelector = inputSelectorMatch[1].trim()
+        }
+        
+        // 提取结果变量名
+        const variableMatch = description.match(/变量[:：]\s*([^,，]+)/)
+        if (variableMatch) {
+          params.resultVariable = variableMatch[1].trim()
+        } else {
+          params.resultVariable = 'captcha_result'
+        }
+        
+        // 是否自动输入
+        params.autoInput = !description.includes('不自动输入') && !description.includes('手动输入')
+        
+        // 超时时间
+        const timeoutMatch = description.match(/(\d+)\s*秒/)
+        if (timeoutMatch) {
+          params.timeout = parseInt(timeoutMatch[1])
+        } else {
+          params.timeout = 30
+        }
+        
+        // 重试次数
+        const retryMatch = description.match(/重试\s*(\d+)\s*次/)
+        if (retryMatch) {
+          params.retryCount = parseInt(retryMatch[1])
+        } else {
+          params.retryCount = 2
+        }
+        
+        // 失败处理方式
+        if (description.includes('停止') || description.includes('stop')) {
+          params.onFailure = 'stop'
+        } else if (description.includes('继续') || description.includes('continue')) {
+          params.onFailure = 'continue'
+        } else {
+          params.onFailure = 'manual'
+        }
+        
+        break
     }
     
     return params
@@ -200,7 +289,7 @@ export class FlowGenerator {
       
       nodes.push({
         id: nodeId,
-        type: step.nodeType as 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export',
+        type: step.nodeType as FlowNode['type'],
         x: this.startX,
         y: y,
         text: this.getNodeText(step),
@@ -322,6 +411,30 @@ export class FlowGenerator {
           condition: params.condition || '',
           operator: '==',
           value: params.value || ''
+        }
+        
+      case 'captcha':
+        return {
+          provider: params.provider || 'baidu',
+          apiKey: params.apiKey || '',
+          secretKey: params.secretKey || '',
+          apiUrl: params.apiUrl || '',
+          captchaSource: params.captchaSource || 'element',
+          captchaSelector: params.captchaSelector || '',
+          screenshotType: params.screenshotType || 'viewport',
+          x: params.x || 0,
+          y: params.y || 0,
+          width: params.width || 300,
+          height: params.height || 100,
+          captchaType: params.captchaType || 'normal',
+          resultVariable: params.resultVariable || 'captcha_result',
+          inputSelector: params.inputSelector || '',
+          autoInput: params.autoInput !== false,
+          timeout: params.timeout || 30,
+          retryCount: params.retryCount || 2,
+          onFailure: params.onFailure || 'manual',
+          saveImage: params.saveImage || false,
+          imagePath: params.imagePath || './captcha_images/'
         }
         
       default:

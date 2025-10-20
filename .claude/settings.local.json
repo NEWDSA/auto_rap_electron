@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.logic-flow.cn)",
+      "WebSearch",
+      "Bash(pnpm audit:*)",
+      "Bash(pnpm dev:*)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\views\\designer/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\utils/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\utils/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\electron/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\views\\designer/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\views\\designer/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron/**)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git push:*)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\electron/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\electron/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\electron/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\electron/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\components\\ai-assistant/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron/**)",
+      "Bash(dir:*)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\components\\ai-assistant/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\components\\ai-assistant/**)",
+      "Read(/E:\\no_smart_code\\auto_rap_electron\\src\\services/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

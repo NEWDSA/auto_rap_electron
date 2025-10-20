@@ -9,9 +9,18 @@ import './styles/tailwind.css'
 import './styles/index.css'
 import { initializeIpcHandlers } from './utils/ipcHandlers'
 import { nodeManager } from './utils/node-manager'
+import { licenseService } from './services/license-service'
+import { vLicense, vFeature } from './directives/license'
 
 // 初始化IPC处理程序
 initializeIpcHandlers()
+
+// 初始化许可证服务 - 暂时注释掉
+// licenseService.initializeLicense().then(() => {
+//   console.log('🔑 许可证服务初始化完成')
+// }).catch(error => {
+//   console.error('❌ 许可证服务初始化失败:', error)
+// })
 
 // 初始化节点管理器
 nodeManager.initialize().then(() => {
@@ -30,5 +39,9 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 app.use(pinia)
 app.use(router)
 app.use(ElementPlus)
+
+// 注册许可证指令
+app.directive('license', vLicense)
+app.directive('feature', vFeature)
 
 app.mount('#app')

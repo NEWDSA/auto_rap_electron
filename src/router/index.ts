@@ -43,6 +43,15 @@ const routes: RouteRecordRaw[] = [
           title: '系统设置',
           icon: 'Setting'
         }
+      },
+      {
+        path: 'license',
+        name: 'License',
+        component: () => import('@/views/license/index.vue'),
+        meta: {
+          title: '许可证管理',
+          icon: 'Key'
+        }
       }
     ]
   },
@@ -65,4 +74,4 @@ router.beforeEach((to, from, next) => {
   next()
 })
 
-export default router 
+export default router
