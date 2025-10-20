@@ -22,6 +22,9 @@ const dbService = DatabaseService.getInstance()
 // 录制服务实例
 let recorderService: RecorderService
 
+// 主窗口实例
+let mainWindow: BrowserWindow | null = null
+
 // 初始化数据库服务和自动化控制器
 const taskScheduler = TaskScheduler.getInstance(automationController)
 
@@ -65,7 +68,7 @@ function launchChrome() {
 async function createWindow() {
   try {
     // 创建浏览器窗口
-    const mainWindow = new BrowserWindow({
+    mainWindow = new BrowserWindow({
       width: 1280,
       height: 800,
       minWidth: 1024,
@@ -835,6 +838,157 @@ ipcMain.handle('system:power', async (_event, payload) => {
     return { success: false, error: `当前平台不支持: ${process.platform}` }
   } catch (error: any) {
     return { success: false, error: error?.message || '电源操作失败' }
+  }
+})
+
+// 文件读取处理程序
+ipcMain.handle('file:read', async (_event, payload) => {
+  try {
+    const { filePath, fileType, encoding, includeMetadata, extractImages, extractTables } = payload
+
+    if (!filePath) {
+      return { success: false, error: '文件路径不能为空' }
+    }
+
+    const fs = require('fs')
+    const path = require('path')
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: `文件不存在: ${filePath}` }
+    }
+
+    // 获取文件扩展名
+    const ext = path.extname(filePath).toLowerCase().slice(1)
+    const actualFileType = fileType === 'auto' ? ext : fileType
+
+    let content = ''
+    let metadata: any = {}
+
+    switch (actualFileType) {
+      case 'pdf':
+        const pdfParse = require('pdf-parse')
+        const pdfBuffer = fs.readFileSync(filePath)
+        const pdfData = await pdfParse(pdfBuffer)
+        content = pdfData.text
+        if (includeMetadata) {
+          metadata = {
+            pages: pdfData.numpages,
+            info: pdfData.info,
+            version: pdfData.version
+          }
+        }
+        break
+
+      case 'txt':
+        const detectedEncoding = encoding === 'auto' ? 'utf8' : encoding
+        try {
+          content = fs.readFileSync(filePath, detectedEncoding)
+        } catch (encodingError) {
+          // 如果指定编码失败，尝试其他编码
+          const encodings = ['utf8', 'gbk', 'gb2312']
+          for (const enc of encodings) {
+            try {
+              content = fs.readFileSync(filePath, enc)
+              break
+            } catch (e) {
+              continue
+            }
+          }
+          if (!content) {
+            return { success: false, error: '无法读取文件，尝试了多种编码格式' }
+          }
+        }
+        break
+
+      case 'docx':
+        const mammoth = require('mammoth')
+        const docxBuffer = fs.readFileSync(filePath)
+        const docxResult = await mammoth.extractRawText({ buffer: docxBuffer })
+        content = docxResult.value
+        if (includeMetadata) {
+          metadata = {
+            messages: docxResult.messages
+          }
+        }
+        break
+
+      case 'doc':
+        return { success: false, error: 'DOC格式暂不支持，请使用DOCX格式' }
+
+      default:
+        return { success: false, error: `不支持的文件格式: ${actualFileType}` }
+    }
+
+    return {
+      success: true,
+      data: {
+        content,
+        metadata: includeMetadata ? metadata : undefined,
+        filePath,
+        fileType: actualFileType,
+        size: fs.statSync(filePath).size,
+        lastModified: fs.statSync(filePath).mtime
+      }
+    }
+  } catch (error: any) {
+    return { success: false, error: error?.message || '文件读取失败' }
+  }
+})
+
+// 文件预览处理程序
+ipcMain.handle('file:preview', async (_event, payload) => {
+  try {
+    const { filePath, fileType } = payload
+
+    if (!filePath) {
+      return { success: false, error: '文件路径不能为空' }
+    }
+
+    // 使用系统默认程序打开文件
+    const { exec } = require('child_process')
+    const command = process.platform === 'win32' ? `start "" "${filePath}"` : 
+                   process.platform === 'darwin' ? `open "${filePath}"` : 
+                   `xdg-open "${filePath}"`
+
+    exec(command, (error: any) => {
+      if (error) {
+        console.error('预览文件失败:', error)
+      }
+    })
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error?.message || '文件预览失败' }
+  }
+})
+
+// 文件对话框处理程序
+ipcMain.handle('dialog:openFile', async (_event, options) => {
+  try {
+    if (!mainWindow) {
+      return { 
+        canceled: true, 
+        filePaths: [], 
+        error: '主窗口未初始化' 
+      }
+    }
+    
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: options.title || '选择文件',
+      filters: options.filters || [
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    
+    return result
+  } catch (error: any) {
+    return { 
+      canceled: true, 
+      filePaths: [], 
+      error: error?.message || '打开文件对话框失败' 
+    }
   }
 })
 

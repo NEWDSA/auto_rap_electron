@@ -237,6 +237,7 @@ import ScrollConfig from '@/components/node-configs/ScrollConfig.vue'
 import ExportConfig from '@/components/node-configs/ExportConfig.vue'
 import CaptchaConfig from '@/components/node-configs/CaptchaConfig.vue'
 import PowerConfig from '@/components/node-configs/PowerConfig.vue'
+import FileReaderConfig from '@/components/node-configs/FileReaderConfig.vue'
 
 // 类型定义
 import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
@@ -286,6 +287,7 @@ const basicNodes: NodeConfig[] = [
   { type: 'scroll', name: '滚动', icon: 'DArrowDown' },
   { type: 'export', name: '导出', icon: 'Download' },
   { type: 'power', name: '系统电源', icon: 'SwitchButton' },
+  { type: 'fileReader', name: '文件读取', icon: 'Document' },
   { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
 
@@ -312,7 +314,8 @@ const nodeConfigComponent = computed(() => {
     screenshot: ScreenshotConfig,
     scroll: ScrollConfig,
     export: ExportConfig,
-    power: PowerConfig
+    power: PowerConfig,
+    fileReader: FileReaderConfig
   } as const
 
   const component = componentMap[selectedNode.value.type as keyof typeof componentMap]

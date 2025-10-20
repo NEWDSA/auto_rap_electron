@@ -120,19 +120,28 @@ export interface NodeProperties {
   sheetName?: string
   delimiter?: string
   includeHeaders?: boolean
-  encoding?: string
+  exportEncoding?: string
   saveMode?: 'auto' | 'select'
 
   // 电源控制相关属性
   action?: 'lock' | 'sleep' | 'restart' | 'shutdown'
   force?: boolean
 
+  // 文件读取相关属性
+  filePath?: string
+  fileType?: 'pdf' | 'txt' | 'doc' | 'docx' | 'auto'
+  fileEncoding?: 'utf8' | 'gbk' | 'gb2312' | 'auto'
+  outputVariable?: string
+  includeMetadata?: boolean
+  extractImages?: boolean
+  extractTables?: boolean
+
   [key: string]: any
 }
 
 export interface FlowNode {
   id: string
-  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' | 'power'
+  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' | 'power' | 'fileReader'
   x: number
   y: number
   text: string

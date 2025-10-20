@@ -244,6 +244,9 @@ export class AutomationController {
       case 'power':
         await this.executePowerNode(properties)
         break
+      case 'fileReader':
+        await this.executeFileReaderNode(properties)
+        break
       default:
         throw new Error(`未知的节点类型: ${type}`)
     }
@@ -336,6 +339,111 @@ export class AutomationController {
     } catch (error) {
       console.error('执行电源操作失败:', error)
       throw new Error(`执行电源操作失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  private async executeFileReaderNode(properties: NodeProperties) {
+    const { 
+      filePath, 
+      fileType = 'auto', 
+      fileEncoding = 'auto', 
+      outputVariable = 'fileContent',
+      includeMetadata = false,
+      extractImages = false,
+      extractTables = false
+    } = properties as any
+
+    if (!filePath) {
+      throw new Error('文件路径不能为空')
+    }
+
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      
+      // 检查文件是否存在
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`文件不存在: ${filePath}`)
+      }
+
+      // 获取文件扩展名
+      const ext = path.extname(filePath).toLowerCase().slice(1)
+      const actualFileType = fileType === 'auto' ? ext : fileType
+
+      let content = ''
+      let metadata: any = {}
+
+      switch (actualFileType) {
+        case 'pdf':
+          const pdfParse = require('pdf-parse')
+          const pdfBuffer = fs.readFileSync(filePath)
+          const pdfData = await pdfParse(pdfBuffer)
+          content = pdfData.text
+          if (includeMetadata) {
+            metadata = {
+              pages: pdfData.numpages,
+              info: pdfData.info,
+              version: pdfData.version
+            }
+          }
+          break
+
+        case 'txt':
+          const detectedEncoding = fileEncoding === 'auto' ? 'utf8' : fileEncoding
+          try {
+            content = fs.readFileSync(filePath, detectedEncoding)
+          } catch (encodingError) {
+            // 如果指定编码失败，尝试其他编码
+            const encodings = ['utf8', 'gbk', 'gb2312']
+            for (const enc of encodings) {
+              try {
+                content = fs.readFileSync(filePath, enc)
+                break
+              } catch (e) {
+                continue
+              }
+            }
+            if (!content) {
+              throw new Error('无法读取文件，尝试了多种编码格式')
+            }
+          }
+          break
+
+        case 'docx':
+          const mammoth = require('mammoth')
+          const docxBuffer = fs.readFileSync(filePath)
+          const docxResult = await mammoth.extractRawText({ buffer: docxBuffer })
+          content = docxResult.value
+          if (includeMetadata) {
+            metadata = {
+              messages: docxResult.messages
+            }
+          }
+          break
+
+        case 'doc':
+          // 对于老版本的DOC文件，我们只能提供基本支持
+          throw new Error('DOC格式暂不支持，请使用DOCX格式')
+
+        default:
+          throw new Error(`不支持的文件格式: ${actualFileType}`)
+      }
+
+      // 存储到变量中
+      this.variables[outputVariable] = {
+        content,
+        metadata: includeMetadata ? metadata : undefined,
+        filePath,
+        fileType: actualFileType,
+        size: fs.statSync(filePath).size,
+        lastModified: fs.statSync(filePath).mtime
+      }
+
+      console.log(`文件读取成功: ${filePath}, 内容长度: ${content.length}`)
+      
+    } catch (error) {
+      console.error('执行文件读取失败:', error)
+      throw new Error(`执行文件读取失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

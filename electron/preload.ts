@@ -48,7 +48,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       // 统计相关通道
       'get-stats',
       // 系统电源控制
-      'system:power'
+      'system:power',
+      // 文件读取相关通道
+      'file:read',
+      'file:preview',
+      'dialog:openFile'
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
