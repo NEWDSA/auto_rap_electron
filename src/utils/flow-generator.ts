@@ -23,10 +23,10 @@ export class FlowGenerator {
   async generateFromDescription(description: string): Promise<FlowNode[]> {
     // 解析步骤
     const steps = this.parseSteps(description)
-    
+
     // 转换为节点
     const nodes = this.convertToNodes(steps)
-    
+
     return nodes
   }
 
@@ -36,49 +36,83 @@ export class FlowGenerator {
   private parseSteps(description: string): ParsedStep[] {
     const steps: ParsedStep[] = []
     const lines = description.split('\n').filter(line => line.trim())
-    
+
     for (const line of lines) {
       // 匹配格式: 1. [browser] 打开浏览器并访问 https://example.com
       const match = line.match(/^(\d+)\.\s*\[(\w+)\]\s*(.+)$/)
       if (match) {
         const [, index, nodeType, desc] = match
         const parameters = this.extractParameters(nodeType, desc)
-        
+
         steps.push({
           index: parseInt(index),
           nodeType: this.normalizeNodeType(nodeType),
           description: desc,
-          parameters
+          parameters,
         })
       }
     }
-    
+
     return steps
   }
 
   /**
    * 规范化节点类型
    */
-  private normalizeNodeType(type: string): 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' {
-    const typeMap: Record<string, 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha'> = {
-      'browser': 'browser',
-      'click': 'click',
-      'input': 'input',
-      'extract': 'extract',
-      'wait': 'wait',
-      'screenshot': 'screenshot',
-      'scroll': 'scroll',
-      'keyboard': 'keyboard',
-      'mouse': 'mouse',
-      'switch': 'switch',
-      'condition': 'switch',
-      'loop': 'loop',
-      'export': 'export',
-      'captcha': 'captcha',
-      '验证码': 'captcha',
-      '识别': 'captcha'
+  private normalizeNodeType(
+    type: string
+  ):
+    | 'start'
+    | 'end'
+    | 'browser'
+    | 'click'
+    | 'input'
+    | 'extract'
+    | 'keyboard'
+    | 'mouse'
+    | 'wait'
+    | 'screenshot'
+    | 'switch'
+    | 'loop'
+    | 'scroll'
+    | 'export'
+    | 'captcha' {
+    const typeMap: Record<
+      string,
+      | 'start'
+      | 'end'
+      | 'browser'
+      | 'click'
+      | 'input'
+      | 'extract'
+      | 'keyboard'
+      | 'mouse'
+      | 'wait'
+      | 'screenshot'
+      | 'switch'
+      | 'loop'
+      | 'scroll'
+      | 'export'
+      | 'captcha'
+    > = {
+      browser: 'browser',
+      click: 'click',
+      input: 'input',
+      extract: 'extract',
+      wait: 'wait',
+      screenshot: 'screenshot',
+      scroll: 'scroll',
+      keyboard: 'keyboard',
+      mouse: 'mouse',
+      switch: 'switch',
+      condition: 'switch',
+      loop: 'loop',
+      export: 'export',
+      captcha: 'captcha',
+      验证码: 'captcha',
+      识别: 'captcha',
     }
-    
+
     return typeMap[type.toLowerCase()] || 'browser'
   }
 
@@ -87,7 +121,7 @@ export class FlowGenerator {
    */
   private extractParameters(nodeType: string, description: string): Record<string, any> {
     const params: Record<string, any> = {}
-    
+
     switch (nodeType.toLowerCase()) {
       case 'browser':
         // 提取 URL
@@ -103,7 +137,7 @@ export class FlowGenerator {
         params.waitForLoad = true
         params.timeout = 30
         break
-        
+
       case 'click':
       case 'input':
       case 'extract':
@@ -112,7 +146,7 @@ export class FlowGenerator {
         if (selectorMatch) {
           params.selector = selectorMatch[1].trim()
         }
-        
+
         // 提取输入值
         if (nodeType === 'input') {
           const valueMatch = description.match(/值[:：]\s*([^,，]+)/)
@@ -121,7 +155,7 @@ export class FlowGenerator {
           }
         }
         break
-        
+
       case 'wait':
         // 提取等待时间
         const timeMatch = description.match(/(\d+)\s*[秒s]/)
@@ -132,7 +166,7 @@ export class FlowGenerator {
         }
         params.type = 'fixed'
         break
-        
+
       case 'export':
         // 判断导出类型
         if (description.includes('Excel')) {
@@ -146,12 +180,12 @@ export class FlowGenerator {
         }
         params.fileName = `export_${Date.now()}`
         break
-        
+
       case 'screenshot':
         params.fullPage = description.includes('全页') || description.includes('full')
         params.fileName = `screenshot_${Date.now()}`
         break
-        
+
       case 'scroll':
         if (description.includes('底部')) {
           params.direction = 'bottom'
@@ -162,7 +196,7 @@ export class FlowGenerator {
           params.distance = 500
         }
         break
-        
+
       case 'loop':
         const countMatch = description.match(/(\d+)\s*次/)
         if (countMatch) {
@@ -172,10 +206,10 @@ export class FlowGenerator {
           params.loopType = 'condition'
         }
         break
-        
+
       case 'captcha':
         // 提取验证码识别参数
-        
+
         // 识别服务商
         if (description.includes('百度')) {
           params.provider = 'baidu'
@@ -186,7 +220,7 @@ export class FlowGenerator {
         } else {
           params.provider = 'baidu' // 默认使用百度
         }
-        
+
         // 验证码类型
         if (description.includes('点击') || description.includes('click')) {
           params.captchaType = 'click'
@@ -199,7 +233,7 @@ export class FlowGenerator {
         } else {
           params.captchaType = 'normal'
         }
-        
+
         // 获取方式
         if (description.includes('截图') || description.includes('screenshot')) {
           params.captchaSource = 'screenshot'
@@ -208,19 +242,19 @@ export class FlowGenerator {
         } else {
           params.captchaSource = 'element'
         }
-        
+
         // 提取验证码选择器
         const captchaSelectorMatch = description.match(/验证码选择器[:：]\s*([^,，]+)/)
         if (captchaSelectorMatch) {
           params.captchaSelector = captchaSelectorMatch[1].trim()
         }
-        
+
         // 提取输入框选择器
         const inputSelectorMatch = description.match(/输入框选择器[:：]\s*([^,，]+)/)
         if (inputSelectorMatch) {
           params.inputSelector = inputSelectorMatch[1].trim()
         }
-        
+
         // 提取结果变量名
         const variableMatch = description.match(/变量[:：]\s*([^,，]+)/)
         if (variableMatch) {
@@ -228,10 +262,10 @@ export class FlowGenerator {
         } else {
           params.resultVariable = 'captcha_result'
         }
-        
+
         // 是否自动输入
         params.autoInput = !description.includes('不自动输入') && !description.includes('手动输入')
-        
+
         // 超时时间
         const timeoutMatch = description.match(/(\d+)\s*秒/)
         if (timeoutMatch) {
@@ -239,7 +273,7 @@ export class FlowGenerator {
         } else {
           params.timeout = 30
         }
-        
+
         // 重试次数
         const retryMatch = description.match(/重试\s*(\d+)\s*次/)
         if (retryMatch) {
@@ -247,7 +281,7 @@ export class FlowGenerator {
         } else {
           params.retryCount = 2
         }
-        
+
         // 失败处理方式
         if (description.includes('停止') || description.includes('stop')) {
           params.onFailure = 'stop'
@@ -256,10 +290,10 @@ export class FlowGenerator {
         } else {
           params.onFailure = 'manual'
         }
-        
+
         break
     }
-    
+
     return params
   }
 
@@ -268,7 +302,7 @@ export class FlowGenerator {
    */
   private convertToNodes(steps: ParsedStep[]): FlowNode[] {
     const nodes: FlowNode[] = []
-    
+
     // 添加开始节点
     nodes.push({
       id: `node_${Date.now()}_start`,
@@ -278,15 +312,15 @@ export class FlowGenerator {
       text: '开始',
       properties: {
         name: '开始',
-        nodeType: 'start'
-      }
+        nodeType: 'start',
+      },
     })
-    
+
     // 添加步骤节点
     steps.forEach((step, index) => {
       const nodeId = `node_${Date.now()}_${index}`
       const y = this.startY + (index + 1) * this.nodeSpacing
-      
+
       nodes.push({
         id: nodeId,
         type: step.nodeType as FlowNode['type'],
@@ -296,11 +330,11 @@ export class FlowGenerator {
         properties: {
           name: this.getNodeText(step),
           nodeType: step.nodeType,
-          ...this.getNodeProperties(step.nodeType, step.parameters)
-        }
+          ...this.getNodeProperties(step.nodeType, step.parameters),
+        },
       })
     })
-    
+
     // 添加结束节点
     nodes.push({
       id: `node_${Date.now()}_end`,
@@ -310,10 +344,10 @@ export class FlowGenerator {
       text: '结束',
       properties: {
         name: '结束',
-        nodeType: 'end'
-      }
+        nodeType: 'end',
+      },
     })
-    
+
     return nodes
   }
 
@@ -333,7 +367,7 @@ export class FlowGenerator {
    */
   private getNodeProperties(nodeType: string, params: Record<string, any>): Record<string, any> {
     const defaultProps: Record<string, any> = {}
-    
+
     switch (nodeType) {
       case 'browser':
         return {
@@ -344,75 +378,75 @@ export class FlowGenerator {
           headless: false,
           incognito: false,
           width: 1280,
-          height: 800
+          height: 800,
         }
-        
+
       case 'click':
         return {
           selector: params.selector || '',
           multiple: false,
           waitBefore: 0,
-          waitAfter: 0
+          waitAfter: 0,
         }
-        
+
       case 'input':
         return {
           selector: params.selector || '',
           value: params.value || '',
           clearBefore: true,
-          delay: 100
+          delay: 100,
         }
-        
+
       case 'extract':
         return {
           selector: params.selector || '',
           attribute: 'text',
           multiple: false,
-          variableName: `extract_${Date.now()}`
+          variableName: `extract_${Date.now()}`,
         }
-        
+
       case 'wait':
         return {
           type: params.type || 'fixed',
           duration: params.duration || 3,
-          selector: params.selector || ''
+          selector: params.selector || '',
         }
-        
+
       case 'screenshot':
         return {
           fullPage: params.fullPage || false,
           selector: params.selector || '',
-          fileName: params.fileName || `screenshot_${Date.now()}`
+          fileName: params.fileName || `screenshot_${Date.now()}`,
         }
-        
+
       case 'scroll':
         return {
           direction: params.direction || 'down',
           distance: params.distance || 500,
-          smooth: true
+          smooth: true,
         }
-        
+
       case 'export':
         return {
           format: params.format || 'excel',
           fileName: params.fileName || `export_${Date.now()}`,
-          includeHeaders: true
+          includeHeaders: true,
         }
-        
+
       case 'loop':
         return {
           loopType: params.loopType || 'count',
           count: params.count || 3,
-          condition: params.condition || ''
+          condition: params.condition || '',
         }
-        
+
       case 'switch':
         return {
           condition: params.condition || '',
           operator: '==',
-          value: params.value || ''
+          value: params.value || '',
         }
-        
+
       case 'captcha':
         return {
           provider: params.provider || 'baidu',
@@ -434,9 +468,9 @@ export class FlowGenerator {
           retryCount: params.retryCount || 2,
           onFailure: params.onFailure || 'manual',
           saveImage: params.saveImage || false,
-          imagePath: params.imagePath || './captcha_images/'
+          imagePath: params.imagePath || './captcha_images/',
         }
-        
+
       default:
         return defaultProps
     }

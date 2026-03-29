@@ -45,7 +45,7 @@ export class NodeRegistryService {
     // 使用节点扫描器获取真实的节点信息
     const scanner = NodeScannerService.getInstance()
     const scannedNodes = scanner.scanAllNodes()
-    
+
     // 注册所有扫描到的节点
     scannedNodes.forEach(nodeInfo => {
       this.registerNodeType(nodeInfo)
@@ -79,17 +79,17 @@ export class NodeRegistryService {
   generateSystemPrompt(): string {
     const nodeTypes = this.getAllNodeTypes()
     console.log('🔍 生成系统提示词，节点数量:', nodeTypes.length)
-    
+
     if (nodeTypes.length === 0) {
       console.warn('⚠️ 没有找到任何节点类型，使用默认提示词')
       return `你是一个 RPA（机器人流程自动化）专家。用户会描述他们想要自动化的任务，你需要将其转换为详细的流程步骤。\n\n请分析用户需求，输出结构化的流程步骤。`
     }
-    
+
     let prompt = `你是一个 RPA（机器人流程自动化）专家。用户会描述他们想要自动化的任务，你需要将其转换为详细的流程步骤。\n\n可用的节点类型：\n`
-    
+
     nodeTypes.forEach((nodeType, index) => {
       prompt += `${index + 1}. ${nodeType.type}: ${nodeType.description}\n`
-      
+
       if (nodeType.parameters && nodeType.parameters.length > 0) {
         prompt += `   主要参数：\n`
         nodeType.parameters.forEach(param => {
@@ -99,9 +99,9 @@ export class NodeRegistryService {
       }
       prompt += `\n`
     })
-    
+
     console.log('✅ 系统提示词生成完成，长度:', prompt.length)
-    
+
     prompt += `请分析用户需求，输出结构化的流程步骤。每个步骤包含：
 - 步骤序号
 - 节点类型
@@ -117,7 +117,7 @@ export class NodeRegistryService {
 6. [export] 导出到Excel文件
 
 请确保步骤清晰、可执行，并包含所有必要的细节。`
-    
+
     return prompt
   }
 
@@ -126,14 +126,14 @@ export class NodeRegistryService {
    */
   getNodeTypesByCategory(): Record<string, NodeTypeInfo[]> {
     const categories: Record<string, NodeTypeInfo[]> = {}
-    
+
     this.nodeTypes.forEach(nodeType => {
       if (!categories[nodeType.category]) {
         categories[nodeType.category] = []
       }
       categories[nodeType.category].push(nodeType)
     })
-    
+
     return categories
   }
 }

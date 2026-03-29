@@ -35,7 +35,7 @@ export class AIService {
    */
   async generateFlowDescription(userPrompt: string): Promise<string> {
     const systemPrompt = this.getSystemPrompt()
-    
+
     switch (this.config.provider) {
       case 'openai':
         return this.callOpenAI(systemPrompt, userPrompt)
@@ -70,23 +70,23 @@ export class AIService {
    */
   private async callOpenAI(systemPrompt: string, userPrompt: string): Promise<string> {
     const apiUrl = this.config.apiUrl || 'https://api.openai.com/v1/chat/completions'
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
+          Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify({
           model: this.config.model || 'gpt-3.5-turbo',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: userPrompt },
           ],
           temperature: 0.7,
-          max_tokens: 2000
-        })
+          max_tokens: 2000,
+        }),
       })
 
       if (!response.ok) {
@@ -107,22 +107,20 @@ export class AIService {
    */
   private async callClaude(systemPrompt: string, userPrompt: string): Promise<string> {
     const apiUrl = this.config.apiUrl || 'https://api.anthropic.com/v1/messages'
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.config.apiKey,
-          'anthropic-version': '2023-06-01'
+          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
           model: this.config.model || 'claude-3-haiku-20240307',
-          messages: [
-            { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
-          ],
-          max_tokens: 2000
-        })
+          messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }],
+          max_tokens: 2000,
+        }),
       })
 
       if (!response.ok) {
@@ -144,24 +142,26 @@ export class AIService {
   private async callQwen(systemPrompt: string, userPrompt: string): Promise<string> {
     // 通义千问 API 实现
     // 这里需要根据阿里云的具体 API 文档实现
-    const apiUrl = this.config.apiUrl || 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
-    
+    const apiUrl =
+      this.config.apiUrl ||
+      'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
+          Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify({
           model: 'qwen-turbo',
           input: {
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ]
-          }
-        })
+              { role: 'user', content: userPrompt },
+            ],
+          },
+        }),
       })
 
       if (!response.ok) {
@@ -190,23 +190,23 @@ export class AIService {
    */
   private async callDeepSeek(systemPrompt: string, userPrompt: string): Promise<string> {
     const apiUrl = this.config.apiUrl || 'https://api.deepseek.com/v1/chat/completions'
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
+          Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify({
           model: this.config.model || 'deepseek-chat',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: userPrompt },
           ],
           temperature: 0.7,
-          max_tokens: 2000
-        })
+          max_tokens: 2000,
+        }),
       })
 
       if (!response.ok) {
@@ -227,23 +227,23 @@ export class AIService {
    */
   private async callZhipu(systemPrompt: string, userPrompt: string): Promise<string> {
     const apiUrl = this.config.apiUrl || 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
+          Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify({
           model: this.config.model || 'glm-4',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: userPrompt },
           ],
           temperature: 0.7,
-          max_tokens: 2000
-        })
+          max_tokens: 2000,
+        }),
       })
 
       if (!response.ok) {
@@ -268,11 +268,11 @@ export class AIService {
     }
 
     const { customModel, apiUrl } = this.config
-    
+
     try {
       let requestBody: any
       let headers: Record<string, string> = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       }
 
       // 添加自定义头部
@@ -299,18 +299,16 @@ export class AIService {
           model: this.config.model || 'default',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: userPrompt },
           ],
           temperature: customModel.temperature || 0.7,
-          max_tokens: customModel.maxTokens || 2000
+          max_tokens: customModel.maxTokens || 2000,
         }
       } else if (customModel.requestFormat === 'claude') {
         requestBody = {
           model: this.config.model || 'default',
-          messages: [
-            { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
-          ],
-          max_tokens: customModel.maxTokens || 2000
+          messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }],
+          max_tokens: customModel.maxTokens || 2000,
         }
       } else if (customModel.requestFormat === 'custom' && customModel.requestTemplate) {
         // 使用自定义模板
@@ -322,7 +320,7 @@ export class AIService {
           .replace(/\{\{system\}\}/g, systemPrompt)
           .replace(/\{\{user\}\}/g, userPrompt)
           .replace(/\{\{model\}\}/g, this.config.model || 'default')
-        
+
         requestBody = JSON.parse(templateStr)
       } else {
         // 默认 OpenAI 格式
@@ -330,8 +328,8 @@ export class AIService {
           model: this.config.model || 'default',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
+            { role: 'user', content: userPrompt },
+          ],
         }
       }
 
@@ -339,7 +337,7 @@ export class AIService {
       const response = await fetch(apiUrl!, {
         method: 'POST',
         headers,
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -360,12 +358,13 @@ export class AIService {
         content = data.content?.[0]?.text || ''
       } else {
         // 尝试常见的响应格式
-        content = data.choices?.[0]?.message?.content || 
-                  data.response || 
-                  data.text || 
-                  data.content || 
-                  data.output?.text ||
-                  JSON.stringify(data)
+        content =
+          data.choices?.[0]?.message?.content ||
+          data.response ||
+          data.text ||
+          data.content ||
+          data.output?.text ||
+          JSON.stringify(data)
       }
 
       return content
@@ -384,14 +383,14 @@ export class AIService {
     try {
       const keys = path.split(/[\.\[\]]/).filter(k => k)
       let result = obj
-      
+
       for (const key of keys) {
         if (result === null || result === undefined) {
           return ''
         }
         result = result[key]
       }
-      
+
       return String(result || '')
     } catch {
       return ''

@@ -19,20 +19,17 @@
       </el-form-item>
     </el-form>
   </div>
-  </template>
+</template>
 
 <script setup lang="ts">
-import type { NodeConfigProps } from '@/types/node-config'
+  import type { NodeConfigProps } from '@/types/node-config'
 
-const props = defineProps<NodeConfigProps>()
-const node = props.node
+  const props = defineProps<NodeConfigProps>()
+  const node = props.node
 
-// 初始化默认值
-if (!node.properties.actionType) node.properties.actionType = 'lock'
-if (node.properties.force === undefined) node.properties.force = false
+  // 初始化默认值
+  if (!node.properties.actionType) node.properties.actionType = 'lock'
+  if (node.properties.force === undefined) node.properties.force = false
 </script>
 
-<style scoped>
-</style>
-
-
+<style scoped></style>

@@ -29,10 +29,10 @@ export class NodeManager {
    */
   async initialize() {
     console.log('🔧 初始化节点管理器...')
-    
+
     // 扫描并注册所有节点类型
     await this.scanAndRegisterNodes()
-    
+
     console.log('✅ 节点管理器初始化完成')
     console.log(`📊 已注册 ${this.nodeRegistry.getAllNodeTypes().length} 个节点类型`)
   }
@@ -43,10 +43,10 @@ export class NodeManager {
   private async scanAndRegisterNodes() {
     // 这里可以扩展为动态扫描node-configs目录
     // 目前使用预定义的节点类型
-    
+
     const nodeTypes = this.nodeRegistry.getAllNodeTypes()
     console.log('📋 已注册的节点类型：')
-    
+
     nodeTypes.forEach(nodeType => {
       console.log(`  - ${nodeType.type}: ${nodeType.name} (${nodeType.category})`)
     })
@@ -90,7 +90,10 @@ export class NodeManager {
   /**
    * 验证节点配置
    */
-  validateNodeConfig(nodeType: string, config: Record<string, any>): {
+  validateNodeConfig(
+    nodeType: string,
+    config: Record<string, any>
+  ): {
     valid: boolean
     errors: string[]
   } {
@@ -98,12 +101,12 @@ export class NodeManager {
     if (!nodeInfo) {
       return {
         valid: false,
-        errors: [`未知的节点类型: ${nodeType}`]
+        errors: [`未知的节点类型: ${nodeType}`],
       }
     }
 
     const errors: string[] = []
-    
+
     // 检查必需参数
     if (nodeInfo.parameters) {
       nodeInfo.parameters.forEach(param => {
@@ -115,7 +118,7 @@ export class NodeManager {
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     }
   }
 
@@ -129,7 +132,7 @@ export class NodeManager {
     }
 
     const template: Record<string, any> = {}
-    
+
     nodeInfo.parameters.forEach(param => {
       if (param.defaultValue !== undefined) {
         template[param.name] = param.defaultValue

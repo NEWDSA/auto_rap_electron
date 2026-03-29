@@ -14,8 +14,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/home/index.vue'),
         meta: {
           title: '首页',
-          icon: 'House'
-        }
+          icon: 'House',
+        },
       },
       {
         path: 'designer',
@@ -23,8 +23,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/designer/index.vue'),
         meta: {
           title: '流程设计',
-          icon: 'Edit'
-        }
+          icon: 'Edit',
+        },
       },
       {
         path: 'tasks',
@@ -32,8 +32,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/tasks/index.vue'),
         meta: {
           title: '任务管理',
-          icon: 'List'
-        }
+          icon: 'List',
+        },
       },
       {
         path: 'settings',
@@ -41,8 +41,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/settings/index.vue'),
         meta: {
           title: '系统设置',
-          icon: 'Setting'
-        }
+          icon: 'Setting',
+        },
       },
       {
         path: 'license',
@@ -50,21 +50,21 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/license/index.vue'),
         meta: {
           title: '许可证管理',
-          icon: 'Key'
-        }
-      }
-    ]
+          icon: 'Key',
+        },
+      },
+    ],
   },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: () => import('@/views/error/404.vue')
-  }
+    component: () => import('@/views/error/404.vue'),
+  },
 ]
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes
+  routes,
 })
 
 // 路由守卫

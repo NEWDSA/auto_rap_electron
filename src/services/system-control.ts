@@ -1,7 +1,10 @@
 export type PowerAction = 'shutdown' | 'restart' | 'sleep' | 'lock'
 
 class SystemControlService {
-  async power(action: PowerAction, force: boolean = false): Promise<{ success: boolean; error?: string }> {
+  async power(
+    action: PowerAction,
+    force: boolean = false
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       const result = await window.electronAPI.invoke('system:power', { action, force })
       return result
@@ -28,5 +31,3 @@ class SystemControlService {
 }
 
 export const systemControl = new SystemControlService()
-
-

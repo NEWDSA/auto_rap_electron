@@ -1,102 +1,100 @@
-import { ref, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { licenseService } from '@/services/license-service'
-import LicenseManager from '@/utils/licenseManager'
 
 export function useLicense() {
   const licenseStatus = ref(licenseService.getLicenseStatus())
+  const licenseKey = ref('')
+  const activating = ref(false)
 
-  // 检查是否有有效许可证
+  const refreshLicenseStatus = async () => {
+    try {
+      await licenseService.initializeLicense()
+    } finally {
+      licenseStatus.value = licenseService.getLicenseStatus()
+    }
+  }
+
   const hasValidLicense = computed(() => {
     return licenseStatus.value.type !== '未激活'
   })
 
-  // 检查是否可以执行任务
   const canExecuteTask = computed(() => {
-    const result = licenseService.canExecuteTask()
-    return result.allowed
+    return licenseService.canExecuteTask().allowed
   })
 
-  // 检查功能权限
   const hasFeature = (feature: string) => {
     return licenseService.hasFeature(feature)
   }
 
-  // 刷新许可证状态
-  const refreshLicenseStatus = async () => {
+  const activateLicense = async () => {
+    if (!licenseKey.value.trim()) {
+      ElMessage.warning('请输入许可证密钥')
+      return
+    }
+    activating.value = true
     try {
-      await licenseService.initializeLicense()
-      licenseStatus.value = licenseService.getLicenseStatus()
-    } catch (error) {
-      console.error('刷新许可证状态失败:', error)
+      const res = await licenseService.validateLicenseKey(licenseKey.value.trim())
+      if (!res.success) {
+        ElMessage.error(res.message || '激活失败')
+        return
+      }
+      licenseKey.value = ''
+      await refreshLicenseStatus()
+    } finally {
+      activating.value = false
     }
   }
 
-  // 检查并提示许可证
-  const checkLicenseWithPrompt = async (action: string = '执行此操作') => {
-    if (!hasValidLicense.value) {
-      ElMessage.error('请先激活许可证或开始试用')
-      return false
+  const startTrial = async () => {
+    const res = licenseService.startTrial(7)
+    if (res.success) {
+      ElMessage.success(res.message)
+      await refreshLicenseStatus()
+    } else {
+      ElMessage.warning(res.message)
     }
-
-    const taskCheck = licenseService.canExecuteTask()
-    if (!taskCheck.allowed) {
-      ElMessage.error(taskCheck.message || '无法执行操作')
-      return false
-    }
-
-    return true
   }
 
-  // 检查节点操作权限
-  const checkNodePermission = async (action: 'add' | 'edit' | 'delete' | 'save' | 'run') => {
-    const actionNames = {
-      add: '添加节点',
-      edit: '编辑节点', 
-      delete: '删除节点',
-      save: '保存流程',
-      run: '运行流程'
-    }
-
-    if (!hasValidLicense.value) {
-      await ElMessageBox.alert(
-        `需要有效的许可证才能${actionNames[action]}。请激活许可证或开始7天免费试用。`,
-        '需要许可证',
-        {
-          confirmButtonText: '去激活',
-          type: 'warning'
-        }
-      )
-      return false
-    }
-
-    const taskCheck = licenseService.canExecuteTask()
-    if (!taskCheck.allowed) {
-      ElMessage.error(taskCheck.message || `无法${actionNames[action]}`)
-      return false
-    }
-
-    return true
+  const formatDate = (date?: Date | string) => {
+    if (!date) return ''
+    const d = typeof date === 'string' ? new Date(date) : date
+    if (Number.isNaN(d.getTime())) return ''
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
   }
 
-  // 记录使用情况
-  const recordUsage = async (action: string) => {
-    try {
-      licenseService.recordExecution()
-      await LicenseManager.recordUsage(action)
-    } catch (error) {
-      console.error('记录使用失败:', error)
-    }
+  const getTypeTagType = (type: string) => {
+    if (type.includes('企业')) return 'success'
+    if (type.includes('专业')) return 'success'
+    if (type.includes('试用')) return 'warning'
+    if (type.includes('未激活')) return 'info'
+    return 'info'
+  }
+
+  const getStatusTagType = (status: string) => {
+    if (status.includes('激活')) return 'success'
+    if (status.includes('试用')) return 'warning'
+    if (status.includes('过期')) return 'danger'
+    if (status.includes('无效')) return 'danger'
+    return 'info'
   }
 
   return {
     licenseStatus,
+    licenseKey,
+    activating,
+    activateLicense,
+    startTrial,
+    formatDate,
+    getTypeTagType,
+    getStatusTagType,
+    refreshLicenseStatus,
     hasValidLicense,
     canExecuteTask,
     hasFeature,
-    refreshLicenseStatus,
-    checkLicenseWithPrompt,
-    checkNodePermission,
-    recordUsage
   }
 }
+

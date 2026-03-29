@@ -55,4 +55,4 @@ export interface NodeConfigEmits {
   (e: 'update', key: string): void
 }
 
-export type NodeConfigComponent = DefineComponent<NodeConfigProps, {}, any> 
+export type NodeConfigComponent = DefineComponent<NodeConfigProps, {}, any>

@@ -1,9 +1,17 @@
-import { BrowserWindow, WebContents } from 'electron'
+import { BrowserWindow, WebContents, Notification } from 'electron'
 import type { FlowNode, NodeProperties } from '../src/types/node-config'
 import { ExportUtils } from '../src/utils/exportUtils'
+import { EmailService } from './email-service'
 
 export class AutomationController {
   private browserWindow: BrowserWindow | null = null
+  private currentTaskId: number | null = null
+
+  constructor() {
+    // 设置 UTF-8 编码
+    process.env.LANG = 'zh_CN.UTF-8';
+    process.env.LC_ALL = 'zh_CN.UTF-8';
+  }
   private webContents: WebContents | null = null
   private variables: Record<string, any> = {}
   private isRunning: boolean = false
@@ -121,9 +129,10 @@ export class AutomationController {
     }
   }
 
-  async start(nodes: FlowNode[]) {
+  async start(nodes: FlowNode[], taskId?: number) {
     if (this.isRunning) return
     this.isRunning = true
+    this.currentTaskId = taskId || null
 
     try {
       // 始终关闭现有的浏览器实例，确保每次从干净状态开始
@@ -139,36 +148,62 @@ export class AutomationController {
         this.webContents = null;
       }
 
-      // 创建新的浏览器窗口
-      console.log('创建新的浏览器窗口...');
-      this.browserWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        show: true,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          webSecurity: false, // 允许跨域请求
-          allowRunningInsecureContent: true
-        }
-      });
-
-      this.webContents = this.browserWindow.webContents;
-      console.log('浏览器窗口创建成功');
+      // 检查是否需要浏览器窗口（只有浏览器相关节点才需要）
+      const needsBrowser = nodes.some(node => 
+        ['browser', 'click', 'extract', 'keyboard', 'mouse', 'scroll', 'screenshot', 'input', 'captcha'].includes(node.type)
+      )
       
-      // 设置浏览器窗口关闭事件处理
-      this.browserWindow.on('closed', () => {
-        console.log('浏览器窗口已关闭');
-        this.browserWindow = null;
-        this.webContents = null;
-        this.isRunning = false;
-      });
+      if (needsBrowser) {
+        // 创建新的浏览器窗口
+        console.log('创建新的浏览器窗口...');
+        this.browserWindow = new BrowserWindow({
+          width: 1280,
+          height: 800,
+          show: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            webSecurity: false, // 允许跨域请求
+            allowRunningInsecureContent: true
+          }
+        });
 
-      // 执行根节点
+        this.webContents = this.browserWindow.webContents;
+        console.log('浏览器窗口创建成功');
+        
+        // 加载主窗口的页面，确保语音合成功能可用
+        const mainWindow = require('electron').BrowserWindow.getAllWindows().find(w => w !== this.browserWindow)
+        if (mainWindow) {
+          const mainUrl = mainWindow.webContents.getURL()
+          console.log('加载主窗口页面:', mainUrl)
+          await this.browserWindow.loadURL(mainUrl)
+        } else {
+          // 如果没有主窗口，加载一个简单的页面
+          await this.browserWindow.loadURL('data:text/html,<html><body><h1>自动化执行中...</h1></body></html>')
+        }
+        
+        // 设置浏览器窗口关闭事件处理
+        this.browserWindow.on('closed', () => {
+          console.log('浏览器窗口已关闭');
+          this.browserWindow = null;
+          this.webContents = null;
+          this.isRunning = false;
+        });
+      } else {
+        console.log('当前流程不需要浏览器窗口，直接执行节点');
+      }
+
+      // 执行所有节点（按类型过滤，排除控制节点）
       console.log('开始执行流程节点...');
-      const rootNodes = nodes.filter(node => !node.properties.parentId)
-      for (const node of rootNodes) {
+      const executableNodes = nodes.filter(node => 
+        node.type !== 'start' && node.type !== 'end'
+      )
+      
+      console.log(`找到 ${executableNodes.length} 个可执行节点:`, executableNodes.map(n => `${n.type}(${n.id})`))
+      
+      for (const node of executableNodes) {
         if (!this.isRunning) break
+        console.log(`执行节点: ${node.type} (${node.id})`)
         await this.executeNode(node, nodes)
       }
 
@@ -192,10 +227,158 @@ export class AutomationController {
     }
   }
 
-  private async executeNode(node: FlowNode, nodes: FlowNode[] = []) {
-    if (!this.webContents) throw new Error('浏览器未启动')
+  async executeVideoDownloadNode(node: FlowNode) {
+    const properties = node.properties
+    // 动态引入，避免在不需要时加载
+    const { VideoTools } = await import('./utils/video-tools')
+    
+    const { url, savePath, quality, downloadDanmaku, downloadSubtitle, downloadThumbnail, cookie } = properties as any
+    
+    if (!url) {
+      throw new Error('下载链接不能为空')
+    }
+    
+    if (!savePath) {
+      throw new Error('保存路径不能为空')
+    }
+    
+    console.log(`开始下载视频: ${url}, 质量: ${quality || 'best'}`)
+    
+    try {
+      // 检查目录是否存在，不存在则创建
+      const fs = require('fs')
+      if (!fs.existsSync(savePath)) {
+        fs.mkdirSync(savePath, { recursive: true })
+      }
+      
+      const onProgress = (progress: number, status: string) => {
+        // 发送 IPC 消息给主窗口
+        const windows = BrowserWindow.getAllWindows()
+        // 优先寻找 localhost 或 file 协议的窗口，排除自动化专用的浏览器窗口
+        const mainWindow = windows.find(w => 
+          (w.webContents.getURL().includes('localhost') || w.webContents.getURL().includes('file://')) && 
+          w !== this.browserWindow
+        )
+        
+        if (mainWindow) {
+          mainWindow.webContents.send('node:progress', {
+            taskId: this.currentTaskId,
+            nodeId: node.id,
+            progress,
+            status
+          })
+        }
+      }
 
+      const result = await VideoTools.getInstance().downloadVideo(url, {
+        savePath,
+        quality,
+        downloadDanmaku: !!downloadDanmaku,
+        downloadSubtitle: !!downloadSubtitle,
+        downloadThumbnail: !!downloadThumbnail,
+        cookie,
+        onProgress
+      })
+      
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+      
+      // 完成时发送 100% 进度
+      onProgress(100, '下载完成')
+      console.log('视频下载完成')
+      
+      // 显示系统通知
+      if (Notification.isSupported()) {
+        new Notification({
+          title: '下载完成',
+          body: `视频下载任务已完成`
+        }).show()
+      }
+      
+    } catch (error: any) {
+      // 显示失败通知
+      if (Notification.isSupported()) {
+        new Notification({
+          title: '下载失败',
+          body: `视频下载失败: ${error.message}`
+        }).show()
+      }
+      throw new Error(`视频下载失败: ${error.message}`)
+    }
+  }
+
+  async executeVideoConvertNode(node: FlowNode) {
+    const properties = node.properties as any
+    const { VideoTools } = await import('./utils/video-tools')
+
+    const inputPath = properties.inputPath as string
+    const outputFormat = (properties.outputFormat || 'mp4') as any
+    const outputDir = properties.outputDir as string | undefined
+    const outputPath = properties.outputPath as string | undefined
+    const overwrite = properties.overwrite !== false
+
+    if (!inputPath) {
+      throw new Error('输入文件不能为空')
+    }
+
+    const onProgress = (progress: number, status: string) => {
+      const windows = BrowserWindow.getAllWindows()
+      const mainWindow = windows.find(w =>
+        (w.webContents.getURL().includes('localhost') || w.webContents.getURL().includes('file://')) &&
+        w !== this.browserWindow
+      )
+
+      if (mainWindow) {
+        mainWindow.webContents.send('node:progress', {
+          taskId: this.currentTaskId,
+          nodeId: node.id,
+          progress,
+          status
+        })
+      }
+    }
+
+    try {
+      const result = await VideoTools.getInstance().convertVideo(inputPath, {
+        outputFormat,
+        outputDir,
+        outputPath,
+        overwrite,
+        onProgress
+      })
+
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+
+      onProgress(100, '转换完成')
+
+      if (Notification.isSupported()) {
+        new Notification({
+          title: '转换完成',
+          body: `视频格式转换已完成`
+        }).show()
+      }
+    } catch (error: any) {
+      if (Notification.isSupported()) {
+        new Notification({
+          title: '转换失败',
+          body: `视频格式转换失败: ${error.message}`
+        }).show()
+      }
+      throw new Error(`视频格式转换失败: ${error.message}`)
+    }
+  }
+
+  private async executeNode(node: FlowNode, nodes: FlowNode[] = []) {
     const { type, properties } = node
+    
+    // 只有需要浏览器的节点才检查 webContents
+    const needsBrowser = ['browser', 'click', 'extract', 'keyboard', 'mouse', 'scroll', 'screenshot', 'input', 'captcha'].includes(type)
+    if (needsBrowser && !this.webContents) {
+      throw new Error('浏览器未启动')
+    }
     
     switch (type) {
       case 'start':
@@ -204,6 +387,12 @@ export class AutomationController {
         break
       case 'browser':
         await this.executeBrowserNode(properties)
+        break
+      case 'video-download':
+        await this.executeVideoDownloadNode(node)
+        break
+      case 'video-convert':
+        await this.executeVideoConvertNode(node)
         break
       case 'click':
         await this.executeClickNode(properties)
@@ -247,8 +436,48 @@ export class AutomationController {
       case 'fileReader':
         await this.executeFileReaderNode(properties)
         break
+      case 'voice':
+        await this.executeVoiceNode(properties)
+        break
+      case 'email':
+        await this.executeEmailNode(properties)
+        break
       default:
         throw new Error(`未知的节点类型: ${type}`)
+    }
+  }
+
+  private async executeEmailNode(properties: NodeProperties) {
+    const { host, port, secure, user, pass, from, to, subject, text, html } = properties as any
+    
+    // 简单的校验
+    if (!host || !user || !pass || !to) {
+      throw new Error('邮件配置不完整：请检查服务器、用户、密码和收件人设置')
+    }
+
+    try {
+      console.log(`正在发送邮件给: ${to}`)
+      const emailService = EmailService.getInstance()
+      const result = await emailService.sendEmail({
+        host,
+        port: Number(port),
+        secure: !!secure,
+        user,
+        pass,
+        from: from || user,
+        to,
+        subject: subject || 'Auto RPA Notification',
+        text,
+        html
+      })
+
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      console.log('邮件发送成功:', result.messageId)
+    } catch (error) {
+      console.error('发送邮件失败:', error)
+      throw new Error(`发送邮件失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -389,22 +618,66 @@ export class AutomationController {
           break
 
         case 'txt':
-          const detectedEncoding = fileEncoding === 'auto' ? 'utf8' : fileEncoding
-          try {
-            content = fs.readFileSync(filePath, detectedEncoding)
-          } catch (encodingError) {
-            // 如果指定编码失败，尝试其他编码
-            const encodings = ['utf8', 'gbk', 'gb2312']
+          if (fileEncoding === 'auto') {
+            // 改进的自动检测编码逻辑
+            const encodings = ['utf8', 'gbk', 'gb2312', 'utf16le', 'utf16be']
+            let success = false
+            let bestContent = ''
+            let bestEncoding = ''
+            
             for (const enc of encodings) {
               try {
-                content = fs.readFileSync(filePath, enc)
-                break
+                const testContent = fs.readFileSync(filePath, enc)
+                // 改进的乱码检测：检查是否包含大量乱码字符
+                const garbledChars = (testContent.match(/[^\x00-\x7F\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || []).length
+                const totalChars = testContent.length
+                const garbledRatio = totalChars > 0 ? garbledChars / totalChars : 0
+                
+                // 如果乱码比例小于10%，认为是有效内容
+                if (garbledRatio < 0.1 && testContent.length > 0) {
+                  if (!success || testContent.length > bestContent.length) {
+                    bestContent = testContent
+                    bestEncoding = enc
+                    success = true
+                  }
+                }
               } catch (e) {
                 continue
               }
             }
-            if (!content) {
-              throw new Error('无法读取文件，尝试了多种编码格式')
+            
+            if (success) {
+              content = bestContent
+              console.log(`使用编码 ${bestEncoding} 读取成功`)
+            } else {
+              // 如果所有编码都失败，使用utf8并记录警告
+              try {
+                content = fs.readFileSync(filePath, 'utf8')
+                console.log('使用UTF-8编码读取，可能存在乱码')
+              } catch (e) {
+                throw new Error('无法读取文件，尝试了多种编码格式')
+              }
+            }
+          } else {
+            // 使用指定编码
+            try {
+              content = fs.readFileSync(filePath, fileEncoding)
+              console.log(`使用指定编码 ${fileEncoding} 读取成功`)
+            } catch (encodingError) {
+              // 如果指定编码失败，尝试其他编码
+              const encodings = ['utf8', 'gbk', 'gb2312']
+              for (const enc of encodings) {
+                try {
+                  content = fs.readFileSync(filePath, enc)
+                  console.log(`指定编码 ${fileEncoding} 失败，使用 ${enc} 成功`)
+                  break
+                } catch (e) {
+                  continue
+                }
+              }
+              if (!content) {
+                throw new Error(`无法读取文件，指定编码 ${fileEncoding} 失败，尝试了多种编码格式`)
+              }
             }
           }
           break
@@ -440,10 +713,439 @@ export class AutomationController {
       }
 
       console.log(`文件读取成功: ${filePath}, 内容长度: ${content.length}`)
+      console.log(`变量存储: ${outputVariable} =`, {
+        content: content.substring(0, 100) + '...',
+        filePath,
+        fileType: actualFileType,
+        size: fs.statSync(filePath).size
+      })
       
     } catch (error) {
       console.error('执行文件读取失败:', error)
       throw new Error(`执行文件读取失败: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  private async executeVoiceNode(properties: NodeProperties) {
+    const { 
+      voiceText, 
+      voiceType = 'system',
+      language = 'zh-CN',
+      voice = 'default',
+      speed = 1.0,
+      pitch = 1.0,
+      volume = 0.8,
+      outputFile = '',
+      playImmediately = true
+    } = properties as any
+
+    if (!voiceText) {
+      throw new Error('朗读文本不能为空')
+    }
+
+    try {
+      // 处理变量替换
+      let processedText = voiceText
+      
+      console.log(`Voice synthesis original text: ${voiceText}`)
+      console.log(`Available variables:`, Object.keys(this.variables))
+      
+      if (typeof processedText === 'string') {
+        // 先处理HTML实体编码的花括号
+        processedText = processedText.replace(/&#123;&#123;(\w+)&#125;&#125;/g, '{{$1}}')
+        
+        // 然后进行变量替换，将 {{变量名}} 替换为实际值
+        processedText = processedText.replace(/\{\{(\w+)\}\}/g, (match: string, varName: string) => {
+          const variable = this.variables[varName]
+          console.log(`Replacing variable ${varName}:`, variable)
+          
+          if (variable) {
+            // 如果变量是对象且有content属性，返回content
+            if (typeof variable === 'object' && variable.content) {
+              console.log(`Using variable ${varName} content:`, variable.content.substring(0, 100) + '...')
+              return variable.content
+            }
+            // 如果变量是字符串，直接返回
+            if (typeof variable === 'string') {
+              console.log(`Using variable ${varName} string value:`, variable.substring(0, 100) + '...')
+              return variable
+            }
+            // 其他情况，尝试转换为字符串
+            console.log(`Converting variable ${varName} to string:`, String(variable))
+            return String(variable)
+          }
+          console.log(`Variable ${varName} not found, keeping original`)
+          return match
+        })
+      }
+      
+      console.log(`Voice synthesis processed text: ${processedText.substring(0, 200)}...`)
+
+      if (voiceType === 'system') {
+        // 使用 Web Speech API（通过渲染进程）
+        if (playImmediately) {
+          console.log('开始播放语音...')
+          // 通过 IPC 调用渲染进程的 Web Speech API
+          await this.speakWithWebSpeechAPI(processedText, {
+            language,
+            voice,
+            speed,
+            pitch,
+            volume
+          })
+          console.log('语音播放完成')
+        }
+
+        if (outputFile) {
+          // 音频文件导出功能暂时保留使用 say.js
+          // 因为 Web Speech API 不直接支持导出音频文件
+          await this.exportWithRetry(processedText, {
+            voice: voice === 'default' ? undefined : voice,
+            speed,
+            pitch,
+            volume
+          }, outputFile)
+          console.log(`语音文件已保存到: ${outputFile}`)
+        }
+      } else {
+        // 在线TTS（这里可以集成其他TTS服务）
+        throw new Error('在线语音合成暂未实现，请使用系统语音')
+      }
+
+      console.log(`语音合成完成: ${processedText.substring(0, 50)}...`)
+      
+    } catch (error) {
+      console.error('执行语音合成失败:', error)
+      // 提供更友好的错误信息
+      const errorMessage = this.getFriendlyErrorMessage(error)
+      throw new Error(`执行语音合成失败: ${errorMessage}`)
+    }
+  }
+
+  // 使用 Web Speech API 播放语音
+  private async speakWithWebSpeechAPI(text: string, options: {
+    language: string
+    voice: string
+    speed: number
+    pitch: number
+    volume: number
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // 优先使用自动化窗口，如果没有则使用主窗口
+      const targetWindow = this.browserWindow || require('electron').BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('localhost') || w.webContents.getURL().includes('file://'))
+      
+      if (!targetWindow) {
+        reject(new Error('没有可用的窗口进行语音合成'))
+        return
+      }
+
+      console.log('使用窗口进行语音合成:', targetWindow === this.browserWindow ? '自动化窗口' : '主窗口')
+
+      // 通过 IPC 调用渲染进程的 Web Speech API
+      targetWindow.webContents.send('automation:speak', {
+        text,
+        options: {
+          lang: options.language,
+          voice: options.voice === 'default' ? undefined : options.voice,
+          rate: options.speed,
+          pitch: options.pitch,
+          volume: options.volume
+        }
+      })
+
+      // 监听播放完成事件
+      const handleSpeechEnd = () => {
+        (targetWindow.webContents as any).removeListener('automation:speech-end', handleSpeechEnd)
+        (targetWindow.webContents as any).removeListener('automation:speech-error', handleSpeechError)
+        resolve()
+      }
+
+      const handleSpeechError = (event: any, error: string) => {
+        (targetWindow.webContents as any).removeListener('automation:speech-end', handleSpeechEnd)
+        (targetWindow.webContents as any).removeListener('automation:speech-error', handleSpeechError)
+        reject(new Error(error))
+      }
+
+      (targetWindow.webContents as any).on('automation:speech-end', handleSpeechEnd)
+      (targetWindow.webContents as any).on('automation:speech-error', handleSpeechError)
+
+      // 设置超时
+      setTimeout(() => {
+        (targetWindow.webContents as any).removeListener('automation:speech-end', handleSpeechEnd)
+        (targetWindow.webContents as any).removeListener('automation:speech-error', handleSpeechError)
+        reject(new Error('语音播放超时'))
+      }, 30000)
+    })
+  }
+
+  // 添加带重试机制的语音播放方法（保留用于文件导出）
+  private async speakWithRetry(text: string, options: any, maxRetries: number = 3): Promise<void> {
+    const say = require('say')
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Voice playback attempt ${attempt}/${maxRetries}`)
+        
+        // 针对中文语音的特殊处理
+        const voiceOptions = this.getOptimalVoiceOptions(options, text)
+        console.log(`Using voice options:`, voiceOptions)
+        
+        // 如果是中文文本，尝试多种语音选项
+        const isChinese = /[\u4e00-\u9fff]/.test(text)
+        if (isChinese && attempt > 1) {
+          const chineseVoices = this.getChineseVoiceOptions()
+          if (chineseVoices[attempt - 1]) {
+            voiceOptions.voice = chineseVoices[attempt - 1]
+            console.log(`Trying Chinese voice: ${voiceOptions.voice}`)
+          }
+        }
+        
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Voice playback timeout'))
+          }, 30000) // 30秒超时
+          
+          say.speak(text, voiceOptions.voice, voiceOptions.speed, (err: any) => {
+            clearTimeout(timeout)
+            if (err) {
+              console.error(`Voice playback attempt ${attempt} failed:`, err)
+              reject(err)
+            } else {
+              console.log(`Voice playback attempt ${attempt} successful`)
+              resolve(void 0)
+            }
+          })
+        })
+        
+        // 如果成功，退出重试循环
+        return
+        
+      } catch (error) {
+        console.error(`Voice playback attempt ${attempt} failed:`, error)
+        
+        if (attempt === maxRetries) {
+          // 最后一次尝试失败，尝试使用系统默认语音
+          const isChinese = /[\u4e00-\u9fff]/.test(text)
+          if (isChinese) {
+            console.log('Trying system default voice for Chinese text')
+            try {
+              await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Voice playback timeout'))
+                }, 30000)
+                
+                say.speak(text, undefined, options.speed || 1.0, (err: any) => {
+                  clearTimeout(timeout)
+                  if (err) {
+                    reject(err)
+                  } else {
+                    console.log('System default voice playback successful')
+                    resolve(void 0)
+                  }
+                })
+              })
+              return
+            } catch (fallbackError) {
+              console.error('System default voice also failed:', fallbackError)
+            }
+          }
+          // 抛出原始错误
+          throw error
+        }
+        
+        // 等待一段时间后重试
+        console.log(`Waiting 2 seconds before retry...`)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+    }
+  }
+
+  // 获取最优的语音选项，特别针对中文
+  private getOptimalVoiceOptions(options: any, text: string): any {
+    const isChinese = /[\u4e00-\u9fff]/.test(text)
+    
+    if (isChinese) {
+      // 中文文本的特殊处理 - 优先使用系统默认语音
+      console.log(`Detected Chinese text, using system default voice`)
+      
+      return {
+        voice: undefined, // 使用系统默认语音，避免语音选择器问题
+        speed: options.speed || 1.0
+      }
+    } else {
+      // 非中文文本使用原始选项
+      return {
+        voice: options.voice,
+        speed: options.speed || 1.0
+      }
+    }
+  }
+
+  // 获取中文语音选项
+  private getChineseVoiceOptions(): string[] {
+    // Windows 常见的中文语音选项，按优先级排序
+    const chineseVoices = [
+      // 尝试常见的中文语音
+      'Microsoft Huihui Desktop - Chinese (Simplified, PRC)',
+      'Microsoft Yaoyao Desktop - Chinese (Simplified, PRC)', 
+      'Microsoft Kangkang Desktop - Chinese (Simplified, PRC)',
+      'Microsoft Huihui - Chinese (Simplified, PRC)',
+      'Microsoft Yaoyao - Chinese (Simplified, PRC)',
+      'Microsoft Kangkang - Chinese (Simplified, PRC)',
+      'Chinese (Simplified, PRC) - Huihui',
+      'Chinese (Simplified, PRC) - Yaoyao', 
+      'Chinese (Simplified, PRC) - Kangkang',
+      'zh-CN-HuihuiNeural',
+      'zh-CN-YaoyaoNeural',
+      'zh-CN-KangkangNeural'
+    ]
+    
+    return chineseVoices
+  }
+
+  // 添加带重试机制的语音导出方法
+  private async exportWithRetry(text: string, options: any, outputPath: string, maxRetries: number = 3): Promise<void> {
+    const say = require('say')
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`语音导出尝试 ${attempt}/${maxRetries}`)
+        
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('语音导出超时'))
+          }, 60000) // 60秒超时
+          
+          say.export(text, options.voice, options.speed, outputPath, (err: any) => {
+            clearTimeout(timeout)
+            if (err) {
+              console.error(`语音导出尝试 ${attempt} 失败:`, err)
+              reject(err)
+            } else {
+              console.log(`语音导出尝试 ${attempt} 成功`)
+              resolve(void 0)
+            }
+          })
+        })
+        
+        // 如果成功，退出重试循环
+        return
+        
+      } catch (error) {
+        console.error(`语音导出尝试 ${attempt} 失败:`, error)
+        
+        if (attempt === maxRetries) {
+          // 最后一次尝试失败，抛出错误
+          throw error
+        }
+        
+        // 等待一段时间后重试
+        console.log(`等待 2 秒后重试...`)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+    }
+  }
+
+  // 获取友好的错误信息
+  private getFriendlyErrorMessage(error: any): string {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    
+    // 检查是否是已知的TTS错误
+    if (errorMessage.includes('J9SC') || errorMessage.includes('SelectVoice')) {
+      return 'Windows中文语音引擎初始化失败，请检查系统是否安装了中文语音包'
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+      return '语音播放超时，请检查系统语音服务是否正常运行'
+    }
+    
+    if (errorMessage.includes('voice') || errorMessage.includes('语音')) {
+      return '中文语音服务不可用，请检查Windows语音设置中的中文语音选项'
+    }
+    
+    if (errorMessage.includes('permission') || errorMessage.includes('权限')) {
+      return '没有语音播放权限，请检查应用程序权限设置'
+    }
+    
+    // 返回原始错误信息，但截断过长的错误信息
+    if (errorMessage.length > 200) {
+      return errorMessage.substring(0, 200) + '...'
+    }
+    
+    return errorMessage
+  }
+
+  // 诊断中文语音引擎
+  async diagnoseChineseVoice(): Promise<{
+    hasChineseVoice: boolean
+    availableVoices: string[]
+    systemInfo: any
+    recommendations: string[]
+  }> {
+    const say = require('say')
+    const os = require('os')
+    
+    try {
+      // 获取系统信息
+      const systemInfo = {
+        platform: os.platform(),
+        arch: os.arch(),
+        version: os.release(),
+        language: process.env.LANG || process.env.LC_ALL || 'unknown'
+      }
+      
+      // 尝试获取可用语音（这个功能在say模块中可能有限）
+      const availableVoices: string[] = []
+      
+      // 测试中文语音
+      const testText = '测试中文语音'
+      let hasChineseVoice = false
+      
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('测试超时'))
+          }, 5000)
+          
+          say.speak(testText, undefined, 1.0, (err: any) => {
+            clearTimeout(timeout)
+            if (err) {
+              reject(err)
+            } else {
+              hasChineseVoice = true
+              resolve(void 0)
+            }
+          })
+        })
+      } catch (testError) {
+        console.log('中文语音测试失败:', testError)
+      }
+      
+      // 生成建议
+      const recommendations: string[] = []
+      
+      if (!hasChineseVoice) {
+        recommendations.push('1. 检查Windows语音设置中是否有中文语音选项')
+        recommendations.push('2. 安装Microsoft Speech Platform Runtime')
+        recommendations.push('3. 下载并安装中文语音包')
+        recommendations.push('4. 在控制面板中测试语音功能')
+        recommendations.push('5. 重启应用程序和系统')
+      }
+      
+      return {
+        hasChineseVoice,
+        availableVoices,
+        systemInfo,
+        recommendations
+      }
+    } catch (error: any) {
+      console.error('语音诊断失败:', error)
+      return {
+        hasChineseVoice: false,
+        availableVoices: [],
+        systemInfo: { error: error?.message || '未知错误' },
+        recommendations: ['请检查系统语音设置', '尝试重启应用程序']
+      }
     }
   }
 
@@ -2727,6 +3429,25 @@ export class AutomationController {
       this.variables = new Map()
     }
     this.variables.set(name, value)
+  }
+
+  /**
+   * 删除变量
+   */
+  deleteVariable(name: string): boolean {
+    if (!this.variables) {
+      return false
+    }
+    return this.variables.delete(name)
+  }
+
+  /**
+   * 清空所有变量
+   */
+  clearVariables(): void {
+    if (this.variables) {
+      this.variables.clear()
+    }
   }
 }   
 

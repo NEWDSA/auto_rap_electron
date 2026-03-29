@@ -8,18 +8,14 @@ interface DraggableComponentProps {
   label: string
 }
 
-export const DraggableComponent: React.FC<DraggableComponentProps> = ({
-  type,
-  icon,
-  label
-}) => {
+export const DraggableComponent: React.FC<DraggableComponentProps> = ({ type, icon, label }) => {
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     // 设置拖拽数据
     e.dataTransfer.setData('nodeType', type)
-    
+
     // 设置默认属性
     const defaultProperties: any = {
-      parentId: null
+      parentId: null,
     }
 
     // 根据组件类型设置特定的默认属性
@@ -36,11 +32,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
   }
 
   return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      style={{ cursor: 'move' }}
-    >
+    <div draggable onDragStart={handleDragStart} style={{ cursor: 'move' }}>
       <Button
         type="text"
         icon={icon}
@@ -51,11 +43,11 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '4px'
+          gap: '4px',
         }}
       >
         <span style={{ marginTop: 4, fontSize: 12 }}>{label}</span>
       </Button>
     </div>
   )
-} 
+}

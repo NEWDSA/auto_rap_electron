@@ -17,10 +17,7 @@
         @input="handleChange"
       >
         <template #append>
-          <el-button 
-            :type="isSelecting ? 'primary' : 'default'"
-            @click="openBrowserForSelect"
-          >
+          <el-button :type="isSelecting ? 'primary' : 'default'" @click="openBrowserForSelect">
             选择元素
           </el-button>
         </template>
@@ -29,10 +26,7 @@
 
     <el-form-item label="点击设置">
       <div class="space-y-2">
-        <el-checkbox
-          v-model="node.properties.waitAfterClick"
-          @change="handleChange"
-        >
+        <el-checkbox v-model="node.properties.waitAfterClick" @change="handleChange">
           点击后等待页面加载
         </el-checkbox>
 
@@ -51,55 +45,55 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import type { FlowNode } from '@/types/node-config'
-import { ipcRenderer } from '@/utils/electron'
-import { ElMessage } from 'element-plus'
+  import { onMounted, ref } from 'vue'
+  import type { FlowNode } from '@/types/node-config'
+  import { ipcRenderer } from '@/utils/electron'
+  import { ElMessage } from 'element-plus'
 
-const props = defineProps<{
-  node: FlowNode
-}>()
+  const props = defineProps<{
+    node: FlowNode
+  }>()
 
-const emit = defineEmits<{
-  (e: 'update', key: string): void
-}>()
+  const emit = defineEmits<{
+    (e: 'update', key: string): void
+  }>()
 
-const isSelecting = ref(false)
+  const isSelecting = ref(false)
 
-const handleChange = () => {
-  emit('update', 'properties')
-}
+  const handleChange = () => {
+    emit('update', 'properties')
+  }
 
-const openBrowserForSelect = async () => {
-  try {
-    isSelecting.value = true
-    ElMessage.info('请在浏览器中选择要点击的元素')
-    
-    const result = await ipcRenderer.invoke('element:startPicker')
-    if (result) {
-      props.node.properties.selector = result.selector
-      props.node.properties.selectorType = result.selectorType
-      handleChange()
-      ElMessage.success('元素选择成功')
+  const openBrowserForSelect = async () => {
+    try {
+      isSelecting.value = true
+      ElMessage.info('请在浏览器中选择要点击的元素')
+
+      const result = await ipcRenderer.invoke('element:startPicker')
+      if (result) {
+        props.node.properties.selector = result.selector
+        props.node.properties.selectorType = result.selectorType
+        handleChange()
+        ElMessage.success('元素选择成功')
+      }
+    } catch (error) {
+      console.error('选择元素失败:', error)
+      ElMessage.error(error.message || '选择元素失败')
+    } finally {
+      isSelecting.value = false
     }
-  } catch (error) {
-    console.error('选择元素失败:', error)
-    ElMessage.error(error.message || '选择元素失败')
-  } finally {
-    isSelecting.value = false
   }
-}
 
-onMounted(() => {
-  // 初始化默认值
-  if (!props.node.properties.selectorType) {
-    props.node.properties.selectorType = 'css'
-  }
-  if (!props.node.properties.waitAfterClick) {
-    props.node.properties.waitAfterClick = false
-  }
-  if (!props.node.properties.clickTimeout) {
-    props.node.properties.clickTimeout = 30
-  }
-})
-</script> 
+  onMounted(() => {
+    // 初始化默认值
+    if (!props.node.properties.selectorType) {
+      props.node.properties.selectorType = 'css'
+    }
+    if (!props.node.properties.waitAfterClick) {
+      props.node.properties.waitAfterClick = false
+    }
+    if (!props.node.properties.clickTimeout) {
+      props.node.properties.clickTimeout = 30
+    }
+  })
+</script>

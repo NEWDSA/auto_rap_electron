@@ -1,10 +1,7 @@
 <template>
   <div class="export-config">
     <el-form-item label="导出类型">
-      <el-select
-        v-model="props.node.properties.exportType"
-        @change="handleExportTypeChange"
-      >
+      <el-select v-model="props.node.properties.exportType" @change="handleExportTypeChange">
         <el-option label="Excel" value="excel" />
         <el-option label="CSV" value="csv" />
         <el-option label="JSON" value="json" />
@@ -24,10 +21,7 @@
     </el-form-item>
 
     <el-form-item label="数据来源">
-      <el-select
-        v-model="props.node.properties.dataSource"
-        @change="handleChange('dataSource')"
-      >
+      <el-select v-model="props.node.properties.dataSource" @change="handleChange('dataSource')">
         <el-option label="变量" value="variable" />
         <el-option label="提取结果" value="extract" />
       </el-select>
@@ -80,14 +74,11 @@
           @change="handleChange('title')"
         />
       </el-form-item>
-      
+
       <!-- PDF特有配置 -->
       <template v-if="checkExportType('pdf')">
         <el-form-item label="页面大小">
-          <el-select
-            v-model="props.node.properties.pageSize"
-            @change="handleChange('pageSize')"
-          >
+          <el-select v-model="props.node.properties.pageSize" @change="handleChange('pageSize')">
             <el-option label="A4" value="A4" />
             <el-option label="A3" value="A3" />
             <el-option label="Letter" value="Letter" />
@@ -137,10 +128,7 @@
     </el-form-item>
 
     <el-form-item label="编码">
-      <el-select
-        v-model="props.node.properties.encoding"
-        @change="handleChange('encoding')"
-      >
+      <el-select v-model="props.node.properties.encoding" @change="handleChange('encoding')">
         <el-option label="UTF-8" value="utf-8" />
         <el-option label="GBK" value="gbk" />
         <el-option label="GB2312" value="gb2312" />
@@ -148,10 +136,7 @@
     </el-form-item>
 
     <el-form-item label="保存方式">
-      <el-radio-group 
-        v-model="props.node.properties.saveMode" 
-        @change="handleSaveModeChange"
-      >
+      <el-radio-group v-model="props.node.properties.saveMode" @change="handleSaveModeChange">
         <el-radio label="auto">自动保存到指定目录</el-radio>
         <el-radio label="select">手动选择保存位置</el-radio>
       </el-radio-group>
@@ -159,87 +144,87 @@
 
     <!-- 添加文件夹选择器，仅在自动保存模式下显示 -->
     <el-form-item v-if="props.node.properties.saveMode === 'auto'" label="保存目录">
-      <directory-selector 
+      <directory-selector
         v-model="props.node.properties.savePath"
-        @update:modelValue="handleChange('savePath')"
+        @update:model-value="handleChange('savePath')"
       />
     </el-form-item>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { FlowNode } from '@/types/node-config'
-import DirectorySelector from '../DirectorySelector.vue'
+  import { ref } from 'vue'
+  import type { FlowNode } from '@/types/node-config'
+  import DirectorySelector from '../DirectorySelector.vue'
 
-interface Props {
-  node: FlowNode
-}
-
-const props = defineProps<Props>()
-const emit = defineEmits(['update'])
-
-// 确保类型正确
-type ExportType = 'excel' | 'csv' | 'json' | 'docx' | 'pdf' | 'image' | 'txt'
-
-// 初始化默认值
-if (!props.node.properties.exportType) {
-  props.node.properties.exportType = 'excel' as ExportType
-  props.node.properties.fileName = 'export'
-  props.node.properties.dataSource = 'variable'
-  props.node.properties.includeHeaders = true
-  props.node.properties.encoding = 'utf-8'
-  props.node.properties.sheetName = 'Sheet1'
-  props.node.properties.delimiter = ','
-  props.node.properties.saveMode = 'auto'
-  props.node.properties.savePath = ''
-  props.node.properties.title = '导出数据'
-  props.node.properties.pageSize = 'A4'
-  props.node.properties.imageFormat = 'png'
-}
-
-// 类型检查辅助函数
-function checkExportType(...types: ExportType[]) {
-  return types.includes(props.node.properties.exportType as ExportType)
-}
-
-// 处理导出类型变化
-const handleExportTypeChange = () => {
-  handleChange('exportType')
-  
-  // 根据导出类型设置默认值
-  if (!props.node.properties.title) {
-    props.node.properties.title = '导出数据'
-    handleChange('title')
+  interface Props {
+    node: FlowNode
   }
-  
-  if (!props.node.properties.pageSize) {
-    props.node.properties.pageSize = 'A4'
-    handleChange('pageSize')
-  }
-  
-  if (!props.node.properties.imageFormat) {
-    props.node.properties.imageFormat = 'png'
-    handleChange('imageFormat')
-  }
-}
 
-const handleChange = (prop: string) => {
-  emit('update', { [prop]: props.node.properties[prop] })
-}
+  const props = defineProps<Props>()
+  const emit = defineEmits(['update'])
 
-const handleSaveModeChange = () => {
-  handleChange('saveMode')
-  // 如果切换到手动选择模式，清空预设的保存路径
-  if (props.node.properties.saveMode === 'select') {
+  // 确保类型正确
+  type ExportType = 'excel' | 'csv' | 'json' | 'docx' | 'pdf' | 'image' | 'txt'
+
+  // 初始化默认值
+  if (!props.node.properties.exportType) {
+    props.node.properties.exportType = 'excel' as ExportType
+    props.node.properties.fileName = 'export'
+    props.node.properties.dataSource = 'variable'
+    props.node.properties.includeHeaders = true
+    props.node.properties.encoding = 'utf-8'
+    props.node.properties.sheetName = 'Sheet1'
+    props.node.properties.delimiter = ','
+    props.node.properties.saveMode = 'auto'
     props.node.properties.savePath = ''
-    handleChange('savePath')
+    props.node.properties.title = '导出数据'
+    props.node.properties.pageSize = 'A4'
+    props.node.properties.imageFormat = 'png'
   }
-}
+
+  // 类型检查辅助函数
+  function checkExportType(...types: ExportType[]) {
+    return types.includes(props.node.properties.exportType as ExportType)
+  }
+
+  // 处理导出类型变化
+  const handleExportTypeChange = () => {
+    handleChange('exportType')
+
+    // 根据导出类型设置默认值
+    if (!props.node.properties.title) {
+      props.node.properties.title = '导出数据'
+      handleChange('title')
+    }
+
+    if (!props.node.properties.pageSize) {
+      props.node.properties.pageSize = 'A4'
+      handleChange('pageSize')
+    }
+
+    if (!props.node.properties.imageFormat) {
+      props.node.properties.imageFormat = 'png'
+      handleChange('imageFormat')
+    }
+  }
+
+  const handleChange = (prop: string) => {
+    emit('update', { [prop]: props.node.properties[prop] })
+  }
+
+  const handleSaveModeChange = () => {
+    handleChange('saveMode')
+    // 如果切换到手动选择模式，清空预设的保存路径
+    if (props.node.properties.saveMode === 'select') {
+      props.node.properties.savePath = ''
+      handleChange('savePath')
+    }
+  }
 </script>
 
 <style scoped>
-.export-config {
-  padding: 10px;
-}
-</style> 
+  .export-config {
+    padding: 10px;
+  }
+</style>

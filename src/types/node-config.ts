@@ -136,12 +136,23 @@ export interface NodeProperties {
   extractImages?: boolean
   extractTables?: boolean
 
+  // 语音合成相关属性
+  voiceText?: string
+  voice?: string
+  speed?: number
+  pitch?: number
+  volume?: number
+  language?: string
+  voiceType?: 'system' | 'online' | 'custom'
+  outputFile?: string
+  playImmediately?: boolean
+
   [key: string]: any
 }
 
 export interface FlowNode {
   id: string
-  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' | 'power' | 'fileReader'
+  type: 'start' | 'end' | 'browser' | 'click' | 'input' | 'extract' | 'keyboard' | 'mouse' | 'wait' | 'screenshot' | 'switch' | 'loop' | 'scroll' | 'export' | 'captcha' | 'power' | 'fileReader' | 'voice' | 'video-download' | 'video-convert' | 'email'
   x: number
   y: number
   text: string

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ui-check": {
+      "command": "node",
+      "args": ["mcp/ui-check-server.js"],
+      "env": {
+        "MCP_BASE_URL": ""
+      }
+    }
+  }
+}
+

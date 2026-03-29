@@ -41,7 +41,10 @@ export class NodeAPI {
   /**
    * 验证节点配置
    */
-  static validateNodeConfig(nodeType: string, config: Record<string, any>): {
+  static validateNodeConfig(
+    nodeType: string,
+    config: Record<string, any>
+  ): {
     valid: boolean
     errors: string[]
   } {
@@ -64,14 +67,14 @@ export class NodeAPI {
   } {
     const nodeTypes = nodeManager.getAllNodeTypes()
     const byCategory: Record<string, number> = {}
-    
+
     nodeTypes.forEach(nodeType => {
       byCategory[nodeType.category] = (byCategory[nodeType.category] || 0) + 1
     })
-    
+
     return {
       total: nodeTypes.length,
-      byCategory
+      byCategory,
     }
   }
 
@@ -81,12 +84,13 @@ export class NodeAPI {
   static searchNodeTypes(query: string): NodeTypeInfo[] {
     const allNodes = nodeManager.getAllNodeTypes()
     const lowerQuery = query.toLowerCase()
-    
-    return allNodes.filter(node => 
-      node.name.toLowerCase().includes(lowerQuery) ||
-      node.description.toLowerCase().includes(lowerQuery) ||
-      node.type.toLowerCase().includes(lowerQuery) ||
-      node.category.toLowerCase().includes(lowerQuery)
+
+    return allNodes.filter(
+      node =>
+        node.name.toLowerCase().includes(lowerQuery) ||
+        node.description.toLowerCase().includes(lowerQuery) ||
+        node.type.toLowerCase().includes(lowerQuery) ||
+        node.category.toLowerCase().includes(lowerQuery)
     )
   }
 
@@ -101,17 +105,17 @@ export class NodeAPI {
     const nodeInfo = nodeManager.getNodeType(type)
     const configTemplate = nodeManager.getNodeConfigTemplate(type)
     const parameterHelp: Record<string, string> = {}
-    
+
     if (nodeInfo?.parameters) {
       nodeInfo.parameters.forEach(param => {
         parameterHelp[param.name] = param.description
       })
     }
-    
+
     return {
       nodeInfo,
       configTemplate,
-      parameterHelp
+      parameterHelp,
     }
   }
 }
@@ -126,5 +130,5 @@ export const {
   generateAISystemPrompt,
   getNodeTypeStats,
   searchNodeTypes,
-  getNodeTypeDetails
+  getNodeTypeDetails,
 } = NodeAPI

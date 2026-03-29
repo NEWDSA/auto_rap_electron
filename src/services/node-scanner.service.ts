@@ -37,7 +37,7 @@ export class NodeScannerService {
       this.scanConditionNode(),
       this.scanLoopNode(),
       this.scanExportNode(),
-      this.scanCaptchaNode()
+      this.scanCaptchaNode(),
     ]
   }
 
@@ -57,51 +57,51 @@ export class NodeScannerService {
           description: '元素选择器类型',
           required: true,
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'selector',
           type: 'string',
           description: '元素选择器表达式，用于定位输入框',
-          required: true
+          required: true,
         },
         {
           name: 'text',
           type: 'textarea',
           description: '要输入的文本内容',
-          required: true
+          required: true,
         },
         {
           name: 'clearFirst',
           type: 'boolean',
           description: '输入前是否清除原有内容',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'simulateTyping',
           type: 'boolean',
           description: '是否模拟真实的打字过程',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'typingDelay',
           type: 'number',
           description: '模拟打字时每个字符的延迟时间（毫秒），范围50-1000',
-          defaultValue: 100
+          defaultValue: 100,
         },
         {
           name: 'waitAfterInput',
           type: 'boolean',
           description: '输入完成后是否等待',
-          defaultValue: false
+          defaultValue: false,
         },
         {
           name: 'waitTimeout',
           type: 'number',
           description: '输入后等待时间（秒），范围1-60',
-          defaultValue: 5
-        }
-      ]
+          defaultValue: 5,
+        },
+      ],
     }
   }
 
@@ -121,27 +121,27 @@ export class NodeScannerService {
           description: '元素选择器类型',
           required: true,
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'selector',
           type: 'string',
           description: '元素选择器表达式，用于定位要点击的元素',
-          required: true
+          required: true,
         },
         {
           name: 'waitAfterClick',
           type: 'boolean',
           description: '点击后是否等待页面加载',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'clickTimeout',
           type: 'number',
           description: '点击后等待超时时间（秒），范围1-60',
-          defaultValue: 5
-        }
-      ]
+          defaultValue: 5,
+        },
+      ],
     }
   }
 
@@ -161,55 +161,55 @@ export class NodeScannerService {
           description: '浏览器操作类型',
           required: true,
           options: ['goto', 'back', 'forward', 'reload', 'close', 'maximize', 'minimize'],
-          defaultValue: 'goto'
+          defaultValue: 'goto',
         },
         {
           name: 'url',
           type: 'string',
-          description: '目标URL地址（当操作类型为goto时必需）'
+          description: '目标URL地址（当操作类型为goto时必需）',
         },
         {
           name: 'waitForLoad',
           type: 'boolean',
           description: '是否等待页面加载完成',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'timeout',
           type: 'number',
           description: '页面加载超时时间（毫秒）',
-          defaultValue: 30000
+          defaultValue: 30000,
         },
         {
           name: 'width',
           type: 'number',
           description: '浏览器窗口宽度（像素）',
-          defaultValue: 1920
+          defaultValue: 1920,
         },
         {
           name: 'height',
           type: 'number',
           description: '浏览器窗口高度（像素）',
-          defaultValue: 1080
+          defaultValue: 1080,
         },
         {
           name: 'headless',
           type: 'boolean',
           description: '是否以无头模式运行浏览器',
-          defaultValue: false
+          defaultValue: false,
         },
         {
           name: 'incognito',
           type: 'boolean',
           description: '是否使用隐身模式',
-          defaultValue: false
+          defaultValue: false,
         },
         {
           name: 'userAgent',
           type: 'string',
-          description: '自定义User-Agent字符串'
-        }
-      ]
+          description: '自定义User-Agent字符串',
+        },
+      ],
     }
   }
 
@@ -229,13 +229,13 @@ export class NodeScannerService {
           description: '元素选择器类型',
           required: true,
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'selector',
           type: 'string',
           description: '元素选择器表达式',
-          required: true
+          required: true,
         },
         {
           name: 'extractType',
@@ -243,59 +243,59 @@ export class NodeScannerService {
           description: '提取数据的类型',
           required: true,
           options: ['text', 'attribute', 'html', 'table', 'list'],
-          defaultValue: 'text'
+          defaultValue: 'text',
         },
         {
           name: 'attributeName',
           type: 'string',
-          description: '要提取的属性名称（当提取类型为attribute时）'
+          description: '要提取的属性名称（当提取类型为attribute时）',
         },
         {
           name: 'variableName',
           type: 'string',
           description: '存储提取数据的变量名称',
-          required: true
+          required: true,
         },
         {
           name: 'headerSelector',
           type: 'string',
-          description: '表格头部选择器（当提取类型为table时）'
+          description: '表格头部选择器（当提取类型为table时）',
         },
         {
           name: 'rowSelector',
           type: 'string',
-          description: '表格行选择器（当提取类型为table时）'
+          description: '表格行选择器（当提取类型为table时）',
         },
         {
           name: 'cellSelector',
           type: 'string',
-          description: '表格单元格选择器（当提取类型为table时）'
+          description: '表格单元格选择器（当提取类型为table时）',
         },
         {
           name: 'hasHeader',
           type: 'boolean',
           description: '表格是否包含头部（当提取类型为table时）',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'extractInnerHTML',
           type: 'boolean',
           description: '是否提取HTML内容而不是纯文本',
-          defaultValue: false
+          defaultValue: false,
         },
         {
           name: 'trimContent',
           type: 'boolean',
           description: '是否去除内容前后的空白字符',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'waitForVisible',
           type: 'boolean',
           description: '是否等待元素可见后再提取',
-          defaultValue: true
-        }
-      ]
+          defaultValue: true,
+        },
+      ],
     }
   }
 
@@ -314,27 +314,27 @@ export class NodeScannerService {
           type: 'number',
           description: '等待时间（毫秒）',
           required: true,
-          defaultValue: 3000
+          defaultValue: 3000,
         },
         {
           name: 'selector',
           type: 'string',
-          description: '等待元素出现的选择器（可选）'
+          description: '等待元素出现的选择器（可选）',
         },
         {
           name: 'selectorType',
           type: 'select',
           description: '选择器类型',
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'waitForVisible',
           type: 'boolean',
           description: '等待元素可见（而不仅仅是存在）',
-          defaultValue: true
-        }
-      ]
+          defaultValue: true,
+        },
+      ],
     }
   }
 
@@ -351,34 +351,34 @@ export class NodeScannerService {
         {
           name: 'selector',
           type: 'string',
-          description: '截图元素选择器（留空则截取整个页面）'
+          description: '截图元素选择器（留空则截取整个页面）',
         },
         {
           name: 'selectorType',
           type: 'select',
           description: '选择器类型',
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'fileName',
           type: 'string',
           description: '截图文件名（不包含扩展名）',
-          defaultValue: 'screenshot'
+          defaultValue: 'screenshot',
         },
         {
           name: 'fullPage',
           type: 'boolean',
           description: '是否截取整个页面（包括滚动区域）',
-          defaultValue: false
+          defaultValue: false,
         },
         {
           name: 'quality',
           type: 'number',
           description: '图片质量（0-100）',
-          defaultValue: 90
-        }
-      ]
+          defaultValue: 90,
+        },
+      ],
     }
   }
 
@@ -398,43 +398,43 @@ export class NodeScannerService {
           description: '滚动类型',
           required: true,
           options: ['scrollToElement', 'scrollToPosition', 'scrollToTop', 'scrollToBottom'],
-          defaultValue: 'scrollToTop'
+          defaultValue: 'scrollToTop',
         },
         {
           name: 'selector',
           type: 'string',
-          description: '目标元素选择器（当滚动类型为scrollToElement时）'
+          description: '目标元素选择器（当滚动类型为scrollToElement时）',
         },
         {
           name: 'selectorType',
           type: 'select',
           description: '选择器类型',
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'x',
           type: 'number',
-          description: 'X坐标位置（当滚动类型为scrollToPosition时）'
+          description: 'X坐标位置（当滚动类型为scrollToPosition时）',
         },
         {
           name: 'y',
           type: 'number',
-          description: 'Y坐标位置（当滚动类型为scrollToPosition时）'
+          description: 'Y坐标位置（当滚动类型为scrollToPosition时）',
         },
         {
           name: 'smooth',
           type: 'boolean',
           description: '是否平滑滚动',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'waitForScroll',
           type: 'boolean',
           description: '滚动后是否等待',
-          defaultValue: true
-        }
-      ]
+          defaultValue: true,
+        },
+      ],
     }
   }
 
@@ -454,26 +454,26 @@ export class NodeScannerService {
           description: '键盘操作类型',
           required: true,
           options: ['press', 'combination', 'type'],
-          defaultValue: 'press'
+          defaultValue: 'press',
         },
         {
           name: 'key',
           type: 'string',
           description: '按键名称或要输入的文本',
-          required: true
+          required: true,
         },
         {
           name: 'modifiers',
           type: 'string',
-          description: '修饰键（如Ctrl、Alt、Shift），多个用+连接'
+          description: '修饰键（如Ctrl、Alt、Shift），多个用+连接',
         },
         {
           name: 'delay',
           type: 'number',
           description: '按键延迟时间（毫秒）',
-          defaultValue: 100
-        }
-      ]
+          defaultValue: 100,
+        },
+      ],
     }
   }
 
@@ -493,37 +493,37 @@ export class NodeScannerService {
           description: '鼠标操作类型',
           required: true,
           options: ['moveToElement', 'moveToPosition', 'click', 'doubleClick', 'rightClick'],
-          defaultValue: 'moveToElement'
+          defaultValue: 'moveToElement',
         },
         {
           name: 'selector',
           type: 'string',
-          description: '目标元素选择器（当操作类型为moveToElement时）'
+          description: '目标元素选择器（当操作类型为moveToElement时）',
         },
         {
           name: 'selectorType',
           type: 'select',
           description: '选择器类型',
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'x',
           type: 'number',
-          description: 'X坐标位置'
+          description: 'X坐标位置',
         },
         {
           name: 'y',
           type: 'number',
-          description: 'Y坐标位置'
+          description: 'Y坐标位置',
         },
         {
           name: 'duration',
           type: 'number',
           description: '移动持续时间（毫秒）',
-          defaultValue: 1000
-        }
-      ]
+          defaultValue: 1000,
+        },
+      ],
     }
   }
 
@@ -543,36 +543,36 @@ export class NodeScannerService {
           description: '条件类型',
           required: true,
           options: ['elementExists', 'textContains', 'attributeEquals', 'custom'],
-          defaultValue: 'elementExists'
+          defaultValue: 'elementExists',
         },
         {
           name: 'selector',
           type: 'string',
-          description: '元素选择器'
+          description: '元素选择器',
         },
         {
           name: 'selectorType',
           type: 'select',
           description: '选择器类型',
           options: ['css', 'xpath', 'id', 'class', 'name'],
-          defaultValue: 'css'
+          defaultValue: 'css',
         },
         {
           name: 'expectedValue',
           type: 'string',
-          description: '期望值（用于文本或属性比较）'
+          description: '期望值（用于文本或属性比较）',
         },
         {
           name: 'attributeName',
           type: 'string',
-          description: '属性名称（当条件类型为attributeEquals时）'
+          description: '属性名称（当条件类型为attributeEquals时）',
         },
         {
           name: 'customCondition',
           type: 'textarea',
-          description: '自定义条件表达式（当条件类型为custom时）'
-        }
-      ]
+          description: '自定义条件表达式（当条件类型为custom时）',
+        },
+      ],
     }
   }
 
@@ -592,43 +592,43 @@ export class NodeScannerService {
           description: '循环类型',
           required: true,
           options: ['count', 'condition', 'forEach', 'while'],
-          defaultValue: 'count'
+          defaultValue: 'count',
         },
         {
           name: 'count',
           type: 'number',
           description: '循环次数（当循环类型为count时）',
-          defaultValue: 1
+          defaultValue: 1,
         },
         {
           name: 'condition',
           type: 'textarea',
-          description: '循环条件表达式（当循环类型为condition或while时）'
+          description: '循环条件表达式（当循环类型为condition或while时）',
         },
         {
           name: 'dataSource',
           type: 'string',
-          description: '数据源变量名（当循环类型为forEach时）'
+          description: '数据源变量名（当循环类型为forEach时）',
         },
         {
           name: 'itemVariable',
           type: 'string',
           description: '循环项变量名（当循环类型为forEach时）',
-          defaultValue: 'item'
+          defaultValue: 'item',
         },
         {
           name: 'indexVariable',
           type: 'string',
           description: '索引变量名（当循环类型为forEach时）',
-          defaultValue: 'index'
+          defaultValue: 'index',
         },
         {
           name: 'maxIterations',
           type: 'number',
           description: '最大迭代次数（防止无限循环）',
-          defaultValue: 1000
-        }
-      ]
+          defaultValue: 1000,
+        },
+      ],
     }
   }
 
@@ -648,13 +648,13 @@ export class NodeScannerService {
           description: '导出格式',
           required: true,
           options: ['excel', 'csv', 'json', 'pdf', 'word'],
-          defaultValue: 'excel'
+          defaultValue: 'excel',
         },
         {
           name: 'fileName',
           type: 'string',
           description: '文件名（不包含扩展名）',
-          required: true
+          required: true,
         },
         {
           name: 'dataSource',
@@ -662,46 +662,46 @@ export class NodeScannerService {
           description: '数据源类型',
           required: true,
           options: ['variable', 'extract', 'all'],
-          defaultValue: 'extract'
+          defaultValue: 'extract',
         },
         {
           name: 'variableName',
           type: 'string',
-          description: '数据源变量名（当数据源类型为variable时）'
+          description: '数据源变量名（当数据源类型为variable时）',
         },
         {
           name: 'sheetName',
           type: 'string',
           description: 'Excel工作表名称（当导出格式为excel时）',
-          defaultValue: 'Sheet1'
+          defaultValue: 'Sheet1',
         },
         {
           name: 'delimiter',
           type: 'string',
           description: 'CSV分隔符（当导出格式为csv时）',
-          defaultValue: ','
+          defaultValue: ',',
         },
         {
           name: 'includeHeaders',
           type: 'boolean',
           description: '是否包含表头',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'encoding',
           type: 'select',
           description: '文件编码',
           options: ['utf-8', 'gbk', 'gb2312'],
-          defaultValue: 'utf-8'
+          defaultValue: 'utf-8',
         },
         {
           name: 'saveMode',
           type: 'select',
           description: '保存模式',
           options: ['auto', 'select', 'overwrite'],
-          defaultValue: 'auto'
-        }
-      ]
+          defaultValue: 'auto',
+        },
+      ],
     }
   }
 
@@ -721,23 +721,23 @@ export class NodeScannerService {
           description: '验证码识别服务商',
           required: true,
           options: ['baidu', 'tencent', 'aliyun', 'youdao', 'jingfeng', 'tutu', 'custom'],
-          defaultValue: 'baidu'
+          defaultValue: 'baidu',
         },
         {
           name: 'apiKey',
           type: 'string',
           description: 'API密钥',
-          required: true
+          required: true,
         },
         {
           name: 'secretKey',
           type: 'string',
-          description: 'API密钥（部分服务商需要）'
+          description: 'API密钥（部分服务商需要）',
         },
         {
           name: 'apiUrl',
           type: 'string',
-          description: '自定义API地址（选择custom服务商时必填）'
+          description: '自定义API地址（选择custom服务商时必填）',
         },
         {
           name: 'captchaSource',
@@ -745,43 +745,43 @@ export class NodeScannerService {
           description: '验证码获取方式',
           required: true,
           options: ['element', 'screenshot', 'upload'],
-          defaultValue: 'element'
+          defaultValue: 'element',
         },
         {
           name: 'captchaSelector',
           type: 'string',
-          description: '验证码元素选择器（元素截图模式必填）'
+          description: '验证码元素选择器（元素截图模式必填）',
         },
         {
           name: 'screenshotType',
           type: 'select',
           description: '截图类型（截图模式时使用）',
           options: ['viewport', 'fullpage', 'custom'],
-          defaultValue: 'viewport'
+          defaultValue: 'viewport',
         },
         {
           name: 'x',
           type: 'number',
           description: '自定义截图区域X坐标',
-          defaultValue: 0
+          defaultValue: 0,
         },
         {
           name: 'y',
           type: 'number',
           description: '自定义截图区域Y坐标',
-          defaultValue: 0
+          defaultValue: 0,
         },
         {
           name: 'width',
           type: 'number',
           description: '自定义截图区域宽度',
-          defaultValue: 300
+          defaultValue: 300,
         },
         {
           name: 'height',
           type: 'number',
           description: '自定义截图区域高度',
-          defaultValue: 100
+          defaultValue: 100,
         },
         {
           name: 'captchaType',
@@ -789,57 +789,57 @@ export class NodeScannerService {
           description: '验证码类型',
           required: true,
           options: ['normal', 'click', 'slide', 'rotate', 'select'],
-          defaultValue: 'normal'
+          defaultValue: 'normal',
         },
         {
           name: 'resultVariable',
           type: 'string',
           description: '结果存储变量名',
-          defaultValue: 'captcha_result'
+          defaultValue: 'captcha_result',
         },
         {
           name: 'inputSelector',
           type: 'string',
-          description: '验证码输入框选择器（自动输入时使用）'
+          description: '验证码输入框选择器（自动输入时使用）',
         },
         {
           name: 'autoInput',
           type: 'boolean',
           description: '是否自动输入识别结果',
-          defaultValue: true
+          defaultValue: true,
         },
         {
           name: 'timeout',
           type: 'number',
           description: '识别超时时间（秒）',
-          defaultValue: 30
+          defaultValue: 30,
         },
         {
           name: 'retryCount',
           type: 'number',
           description: '识别失败重试次数',
-          defaultValue: 2
+          defaultValue: 2,
         },
         {
           name: 'onFailure',
           type: 'select',
           description: '识别失败时的处理方式',
           options: ['stop', 'continue', 'manual'],
-          defaultValue: 'manual'
+          defaultValue: 'manual',
         },
         {
           name: 'saveImage',
           type: 'boolean',
           description: '是否保存验证码图片',
-          defaultValue: false
+          defaultValue: false,
         },
         {
           name: 'imagePath',
           type: 'string',
           description: '图片保存路径',
-          defaultValue: './captcha_images/'
-        }
-      ]
+          defaultValue: './captcha_images/',
+        },
+      ],
     }
   }
 }

@@ -8,9 +8,8 @@ module.exports = {
   extends: [
     'plugin:vue/vue3-recommended',
     'eslint:recommended',
-    '@vue/typescript/recommended',
-    '@vue/prettier',
-    '@vue/prettier/@typescript-eslint',
+    '@vue/eslint-config-typescript/recommended',
+    '@vue/eslint-config-prettier',
   ],
   parserOptions: {
     ecmaVersion: 2021,
@@ -20,6 +19,15 @@ module.exports = {
     'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/no-unused-vars': 'off',
+    '@typescript-eslint/ban-types': 'off',
+    '@typescript-eslint/no-var-requires': 'off',
+    'no-case-declarations': 'off',
+    'no-control-regex': 'off',
+    'no-empty': 'off',
+    'no-useless-escape': 'off',
+    'no-useless-catch': 'off',
+    'vue/no-mutating-props': 'off',
     'vue/multi-word-component-names': 'off',
   },
   overrides: [

@@ -8,9 +8,13 @@
 
       <!-- 验证码识别配置 -->
       <el-divider content-position="left">验证码识别配置</el-divider>
-      
+
       <el-form-item label="识别服务商">
-        <el-select v-model="config.provider" placeholder="选择识别服务商" @change="onProviderChange">
+        <el-select
+          v-model="config.provider"
+          placeholder="选择识别服务商"
+          @change="onProviderChange"
+        >
           <el-option label="百度OCR" value="baidu" />
           <el-option label="腾讯OCR" value="tencent" />
           <el-option label="阿里云OCR" value="aliyun" />
@@ -22,33 +26,30 @@
       </el-form-item>
 
       <el-form-item label="API Key">
-        <el-input 
-          v-model="config.apiKey" 
-          type="password" 
-          placeholder="请输入API Key" 
-          show-password 
+        <el-input
+          v-model="config.apiKey"
+          type="password"
+          placeholder="请输入API Key"
+          show-password
         />
       </el-form-item>
 
-      <el-form-item label="Secret Key" v-if="needSecretKey">
-        <el-input 
-          v-model="config.secretKey" 
-          type="password" 
-          placeholder="请输入Secret Key" 
-          show-password 
+      <el-form-item v-if="needSecretKey" label="Secret Key">
+        <el-input
+          v-model="config.secretKey"
+          type="password"
+          placeholder="请输入Secret Key"
+          show-password
         />
       </el-form-item>
 
-      <el-form-item label="API地址" v-if="config.provider === 'custom'">
-        <el-input 
-          v-model="config.apiUrl" 
-          placeholder="请输入自定义API地址" 
-        />
+      <el-form-item v-if="config.provider === 'custom'" label="API地址">
+        <el-input v-model="config.apiUrl" placeholder="请输入自定义API地址" />
       </el-form-item>
 
       <!-- 验证码获取方式 -->
       <el-divider content-position="left">验证码获取</el-divider>
-      
+
       <el-form-item label="获取方式">
         <el-radio-group v-model="config.captchaSource">
           <el-radio value="screenshot">截图获取</el-radio>
@@ -57,24 +58,21 @@
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="验证码选择器" v-if="config.captchaSource === 'element'">
+      <el-form-item v-if="config.captchaSource === 'element'" label="验证码选择器">
         <div class="selector-input">
-          <el-input 
-            v-model="config.captchaSelector" 
-            placeholder="请输入验证码图片的CSS选择器"
-          />
-          <el-button 
-            type="primary" 
-            @click="startElementPicker" 
+          <el-input v-model="config.captchaSelector" placeholder="请输入验证码图片的CSS选择器" />
+          <el-button
+            type="primary"
             :loading="isPickingElement"
             size="small"
+            @click="startElementPicker"
           >
             {{ isPickingElement ? '选择中...' : '选择元素' }}
           </el-button>
         </div>
       </el-form-item>
 
-      <el-form-item label="截图区域" v-if="config.captchaSource === 'screenshot'">
+      <el-form-item v-if="config.captchaSource === 'screenshot'" label="截图区域">
         <el-radio-group v-model="config.screenshotType">
           <el-radio value="fullpage">全页面</el-radio>
           <el-radio value="viewport">可视区域</el-radio>
@@ -82,7 +80,10 @@
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="截图坐标" v-if="config.captchaSource === 'screenshot' && config.screenshotType === 'custom'">
+      <el-form-item
+        v-if="config.captchaSource === 'screenshot' && config.screenshotType === 'custom'"
+        label="截图坐标"
+      >
         <div class="coordinate-inputs">
           <el-input-number v-model="config.x" placeholder="X" size="small" />
           <el-input-number v-model="config.y" placeholder="Y" size="small" />
@@ -93,7 +94,7 @@
 
       <!-- 验证码类型 -->
       <el-divider content-position="left">验证码类型</el-divider>
-      
+
       <el-form-item label="验证码类型">
         <el-select v-model="config.captchaType" placeholder="选择验证码类型">
           <el-option label="普通验证码" value="normal" />
@@ -109,25 +110,19 @@
 
       <!-- 结果处理 -->
       <el-divider content-position="left">结果处理</el-divider>
-      
+
       <el-form-item label="结果变量名">
-        <el-input 
-          v-model="config.resultVariable" 
-          placeholder="captcha_result" 
-        />
+        <el-input v-model="config.resultVariable" placeholder="captcha_result" />
       </el-form-item>
 
-      <el-form-item label="输入目标" v-if="config.captchaType === 'normal'">
+      <el-form-item v-if="config.captchaType === 'normal'" label="输入目标">
         <div class="selector-input">
-          <el-input 
-            v-model="config.inputSelector" 
-            placeholder="验证码输入框的CSS选择器"
-          />
-          <el-button 
-            type="primary" 
-            @click="startInputPicker" 
+          <el-input v-model="config.inputSelector" placeholder="验证码输入框的CSS选择器" />
+          <el-button
+            type="primary"
             :loading="isPickingInput"
             size="small"
+            @click="startInputPicker"
           >
             {{ isPickingInput ? '选择中...' : '选择输入框' }}
           </el-button>
@@ -141,24 +136,14 @@
 
       <!-- 高级选项 -->
       <el-divider content-position="left">高级选项</el-divider>
-      
+
       <el-form-item label="识别超时">
-        <el-input-number 
-          v-model="config.timeout" 
-          :min="5" 
-          :max="120" 
-          placeholder="30"
-        />
+        <el-input-number v-model="config.timeout" :min="5" :max="120" placeholder="30" />
         <span class="help-text">秒</span>
       </el-form-item>
 
       <el-form-item label="重试次数">
-        <el-input-number 
-          v-model="config.retryCount" 
-          :min="0" 
-          :max="5" 
-          placeholder="2"
-        />
+        <el-input-number v-model="config.retryCount" :min="0" :max="5" placeholder="2" />
       </el-form-item>
 
       <el-form-item label="识别失败处理">
@@ -174,26 +159,23 @@
         <span class="help-text">保存验证码图片到本地</span>
       </el-form-item>
 
-      <el-form-item label="图片路径" v-if="config.saveImage">
-        <el-input 
-          v-model="config.imagePath" 
-          placeholder="./captcha_images/"
-        />
+      <el-form-item v-if="config.saveImage" label="图片路径">
+        <el-input v-model="config.imagePath" placeholder="./captcha_images/" />
       </el-form-item>
 
       <!-- 测试功能 -->
       <el-divider content-position="left">测试功能</el-divider>
-      
+
       <el-form-item>
-        <el-button type="primary" @click="testRecognition" :loading="isTesting">
+        <el-button type="primary" :loading="isTesting" @click="testRecognition">
           {{ isTesting ? '测试中...' : '测试识别' }}
         </el-button>
         <el-button @click="openServiceDoc">查看服务文档</el-button>
       </el-form-item>
 
       <el-form-item v-if="testResult">
-        <el-alert 
-          :title="testResult.success ? '测试成功' : '测试失败'" 
+        <el-alert
+          :title="testResult.success ? '测试成功' : '测试失败'"
           :type="testResult.success ? 'success' : 'error'"
           :description="testResult.message"
           show-icon
@@ -204,213 +186,223 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { CaptchaService, type CaptchaConfig as CaptchaServiceConfig, defaultCaptchaConfigs } from '@/services/captcha-service'
+  import { ref, computed, watch } from 'vue'
+  import { ElMessage } from 'element-plus'
+  import {
+    CaptchaService,
+    type CaptchaConfig as CaptchaServiceConfig,
+    defaultCaptchaConfigs,
+  } from '@/services/captcha-service'
 
-interface CaptchaNodeConfig {
-  name: string
-  nodeType: string
-  // 服务配置
-  provider: string
-  apiKey: string
-  secretKey?: string
-  apiUrl?: string
-  // 验证码获取
-  captchaSource: 'screenshot' | 'element' | 'upload'
-  captchaSelector?: string
-  screenshotType?: 'fullpage' | 'viewport' | 'custom'
-  x?: number
-  y?: number
-  width?: number
-  height?: number
-  // 验证码类型
-  captchaType: string
-  // 结果处理
-  resultVariable: string
-  inputSelector?: string
-  autoInput: boolean
-  // 高级选项
-  timeout: number
-  retryCount: number
-  onFailure: 'stop' | 'continue' | 'manual'
-  saveImage: boolean
-  imagePath?: string
-}
-
-const props = defineProps<{
-  modelValue: CaptchaNodeConfig
-}>()
-
-const emit = defineEmits<{
-  'update:modelValue': [value: CaptchaNodeConfig]
-}>()
-
-// 配置数据
-const config = ref<CaptchaNodeConfig>({
-  name: '验证码识别',
-  nodeType: 'captcha',
-  provider: 'baidu',
-  apiKey: '',
-  captchaSource: 'element',
-  captchaType: 'normal',
-  resultVariable: 'captcha_result',
-  autoInput: true,
-  timeout: 30,
-  retryCount: 2,
-  onFailure: 'manual',
-  saveImage: false,
-  ...props.modelValue
-})
-
-// 状态
-const isPickingElement = ref(false)
-const isPickingInput = ref(false)
-const isTesting = ref(false)
-const testResult = ref<{ success: boolean; message: string } | null>(null)
-
-// 计算属性
-const needSecretKey = computed(() => {
-  return ['baidu', 'tencent', 'ttshitu'].includes(config.value.provider)
-})
-
-// 监听配置变化
-watch(config, (newConfig) => {
-  emit('update:modelValue', newConfig)
-}, { deep: true })
-
-// 服务商变化处理
-const onProviderChange = () => {
-  // 清空相关配置
-  config.value.apiKey = ''
-  config.value.secretKey = ''
-  config.value.apiUrl = ''
-  testResult.value = null
-}
-
-// 开始选择验证码元素
-const startElementPicker = async () => {
-  try {
-    isPickingElement.value = true
-    
-    // 调用元素选择器
-    const result = await window.electronAPI?.invoke('element:startPicker')
-    if (result?.selector) {
-      config.value.captchaSelector = result.selector
-      ElMessage.success('验证码元素选择成功')
-    }
-  } catch (error: any) {
-    ElMessage.error(`选择元素失败: ${error.message}`)
-  } finally {
-    isPickingElement.value = false
-  }
-}
-
-// 开始选择输入框元素
-const startInputPicker = async () => {
-  try {
-    isPickingInput.value = true
-    
-    const result = await window.electronAPI?.invoke('element:startPicker')
-    if (result?.selector) {
-      config.value.inputSelector = result.selector
-      ElMessage.success('输入框元素选择成功')
-    }
-  } catch (error: any) {
-    ElMessage.error(`选择元素失败: ${error.message}`)
-  } finally {
-    isPickingInput.value = false
-  }
-}
-
-// 测试识别功能
-const testRecognition = async () => {
-  if (!config.value.apiKey) {
-    ElMessage.warning('请先配置API Key')
-    return
+  interface CaptchaNodeConfig {
+    name: string
+    nodeType: string
+    // 服务配置
+    provider: string
+    apiKey: string
+    secretKey?: string
+    apiUrl?: string
+    // 验证码获取
+    captchaSource: 'screenshot' | 'element' | 'upload'
+    captchaSelector?: string
+    screenshotType?: 'fullpage' | 'viewport' | 'custom'
+    x?: number
+    y?: number
+    width?: number
+    height?: number
+    // 验证码类型
+    captchaType: string
+    // 结果处理
+    resultVariable: string
+    inputSelector?: string
+    autoInput: boolean
+    // 高级选项
+    timeout: number
+    retryCount: number
+    onFailure: 'stop' | 'continue' | 'manual'
+    saveImage: boolean
+    imagePath?: string
   }
 
-  try {
-    isTesting.value = true
+  const props = defineProps<{
+    modelValue: CaptchaNodeConfig
+  }>()
+
+  const emit = defineEmits<{
+    'update:modelValue': [value: CaptchaNodeConfig]
+  }>()
+
+  // 配置数据
+  const config = ref<CaptchaNodeConfig>({
+    name: '验证码识别',
+    nodeType: 'captcha',
+    provider: 'baidu',
+    apiKey: '',
+    captchaSource: 'element',
+    captchaType: 'normal',
+    resultVariable: 'captcha_result',
+    autoInput: true,
+    timeout: 30,
+    retryCount: 2,
+    onFailure: 'manual',
+    saveImage: false,
+    ...props.modelValue,
+  })
+
+  // 状态
+  const isPickingElement = ref(false)
+  const isPickingInput = ref(false)
+  const isTesting = ref(false)
+  const testResult = ref<{ success: boolean; message: string } | null>(null)
+
+  // 计算属性
+  const needSecretKey = computed(() => {
+    return ['baidu', 'tencent', 'ttshitu'].includes(config.value.provider)
+  })
+
+  // 监听配置变化
+  watch(
+    config,
+    newConfig => {
+      emit('update:modelValue', newConfig)
+    },
+    { deep: true }
+  )
+
+  // 服务商变化处理
+  const onProviderChange = () => {
+    // 清空相关配置
+    config.value.apiKey = ''
+    config.value.secretKey = ''
+    config.value.apiUrl = ''
     testResult.value = null
+  }
 
-    // 创建验证码服务实例
-    const captchaService = new CaptchaService({
-      provider: config.value.provider as any,
-      apiKey: config.value.apiKey,
-      secretKey: config.value.secretKey,
-      apiUrl: config.value.apiUrl,
-      timeout: config.value.timeout * 1000
-    })
+  // 开始选择验证码元素
+  const startElementPicker = async () => {
+    try {
+      isPickingElement.value = true
 
-    // 这里应该获取一个测试图片进行识别
-    // 暂时使用模拟数据
-    const testImageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
-    
-    const result = await captchaService.recognize(testImageBase64, config.value.captchaType)
-    
-    if (result.success) {
-      testResult.value = {
-        success: true,
-        message: `识别成功: ${result.text || '无文本结果'}`
+      // 调用元素选择器
+      const result = await window.electronAPI?.invoke('element:startPicker')
+      if (result?.selector) {
+        config.value.captchaSelector = result.selector
+        ElMessage.success('验证码元素选择成功')
       }
-    } else {
+    } catch (error: any) {
+      ElMessage.error(`选择元素失败: ${error.message}`)
+    } finally {
+      isPickingElement.value = false
+    }
+  }
+
+  // 开始选择输入框元素
+  const startInputPicker = async () => {
+    try {
+      isPickingInput.value = true
+
+      const result = await window.electronAPI?.invoke('element:startPicker')
+      if (result?.selector) {
+        config.value.inputSelector = result.selector
+        ElMessage.success('输入框元素选择成功')
+      }
+    } catch (error: any) {
+      ElMessage.error(`选择元素失败: ${error.message}`)
+    } finally {
+      isPickingInput.value = false
+    }
+  }
+
+  // 测试识别功能
+  const testRecognition = async () => {
+    if (!config.value.apiKey) {
+      ElMessage.warning('请先配置API Key')
+      return
+    }
+
+    try {
+      isTesting.value = true
+      testResult.value = null
+
+      // 创建验证码服务实例
+      const captchaService = new CaptchaService({
+        provider: config.value.provider as any,
+        apiKey: config.value.apiKey,
+        secretKey: config.value.secretKey,
+        apiUrl: config.value.apiUrl,
+        timeout: config.value.timeout * 1000,
+      })
+
+      // 这里应该获取一个测试图片进行识别
+      // 暂时使用模拟数据
+      const testImageBase64 =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
+      const result = await captchaService.recognize(testImageBase64, config.value.captchaType)
+
+      if (result.success) {
+        testResult.value = {
+          success: true,
+          message: `识别成功: ${result.text || '无文本结果'}`,
+        }
+      } else {
+        testResult.value = {
+          success: false,
+          message: result.error || '识别失败',
+        }
+      }
+    } catch (error: any) {
       testResult.value = {
         success: false,
-        message: result.error || '识别失败'
+        message: `测试失败: ${error.message}`,
       }
+    } finally {
+      isTesting.value = false
     }
-  } catch (error: any) {
-    testResult.value = {
-      success: false,
-      message: `测试失败: ${error.message}`
-    }
-  } finally {
-    isTesting.value = false
   }
-}
 
-// 打开服务文档
-const openServiceDoc = () => {
-  const serviceInfo = defaultCaptchaConfigs[config.value.provider as keyof typeof defaultCaptchaConfigs]
-  if (serviceInfo?.website) {
-    window.open(serviceInfo.website, '_blank')
-  } else {
-    ElMessage.info('暂无服务文档链接')
+  // 打开服务文档
+  const openServiceDoc = () => {
+    const serviceInfo =
+      defaultCaptchaConfigs[config.value.provider as keyof typeof defaultCaptchaConfigs]
+    if (serviceInfo?.website) {
+      window.open(serviceInfo.website, '_blank')
+    } else {
+      ElMessage.info('暂无服务文档链接')
+    }
   }
-}
 </script>
 
 <style scoped lang="postcss">
-.captcha-config {
-  @apply p-4;
-}
-
-.selector-input {
-  @apply flex gap-2;
-  
-  .el-input {
-    @apply flex-1;
+  .captcha-config {
+    @apply p-4;
   }
-}
 
-.coordinate-inputs {
-  @apply flex gap-2;
-  
-  .el-input-number {
-    @apply flex-1;
+  .selector-input {
+    @apply flex gap-2;
+
+    .el-input {
+      @apply flex-1;
+    }
   }
-}
 
-.help-text {
-  @apply text-sm text-gray-500 ml-2;
-}
+  .coordinate-inputs {
+    @apply flex gap-2;
 
-.el-divider {
-  @apply my-4;
-}
+    .el-input-number {
+      @apply flex-1;
+    }
+  }
 
-.el-alert {
-  @apply mt-2;
-}
+  .help-text {
+    @apply text-sm text-gray-500 ml-2;
+  }
+
+  .el-divider {
+    @apply my-4;
+  }
+
+  .el-alert {
+    @apply mt-2;
+  }
 </style>

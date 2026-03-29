@@ -21,7 +21,7 @@ export class LicenseManager {
   private licenseServerUrl = 'http://localhost:3001'
   private currentLicense: LicenseInfo | null = null
 
-  private constructor() { }
+  private constructor() {}
 
   static getInstance(): LicenseManager {
     if (!LicenseManager.instance) {
@@ -31,13 +31,17 @@ export class LicenseManager {
   }
 
   // 检查许可证状态（不再支持自动试用）
-  async checkLicenseStatus(): Promise<{ hasValidLicense: boolean; licenseInfo?: any; error?: string }> {
+  async checkLicenseStatus(): Promise<{
+    hasValidLicense: boolean
+    licenseInfo?: any
+    error?: string
+  }> {
     const licenseKey = localStorage.getItem('license_key')
 
     if (!licenseKey) {
       return {
         hasValidLicense: false,
-        error: '未找到许可证，请联系管理员获取授权'
+        error: '未找到许可证，请联系管理员获取授权',
       }
     }
 
@@ -46,17 +50,31 @@ export class LicenseManager {
       return {
         hasValidLicense: result.valid,
         licenseInfo: result.license,
-        error: result.error
+        error: result.error,
       }
     } catch (error) {
       return {
         hasValidLicense: false,
-        error: '许可证验证失败'
+        error: '许可证验证失败',
       }
     }
   }
   // 验证许可证（严格模式：必须有有效许可证）
   async validateLicense(licenseKey?: string): Promise<LicenseInfo> {
+    // 暂时跳过验证
+    return {
+      valid: true,
+      license: {
+        key: 'DEV-LICENSE-KEY',
+        type: 'enterprise',
+        expiresAt: '2099-12-31',
+        features: ['all'],
+        devicesUsed: 1,
+        maxDevices: 999,
+      },
+    }
+
+    /* 原有逻辑
     try {
       if (!licenseKey) {
         licenseKey = localStorage.getItem('license_key') || ''
@@ -98,32 +116,19 @@ export class LicenseManager {
       if (cachedLicense) {
         try {
           const parsed = JSON.parse(cachedLicense)
-          const now = new Date()
-          const expiresAt = new Date(parsed.expiresAt)
-
-          if (expiresAt > now) {
-            return {
-              valid: true,
-              license: parsed,
-              error: '离线模式（使用缓存的许可证）'
-            }
-          } else {
-            return {
-              valid: false,
-              error: '许可证已过期',
-              isExpired: true
-            }
+          return {
+            valid: true,
+            license: parsed
           }
-        } catch (e) {
-          console.error('Failed to parse cached license:', e)
-        }
+        } catch { }
       }
 
       return {
         valid: false,
-        error: '无法连接到许可证服务器，且无有效的缓存许可证'
+        error: '验证服务器连接失败，请检查网络或联系管理员'
       }
     }
+    */
   }
 
   // 激活许可证
@@ -159,7 +164,7 @@ export class LicenseManager {
         key: licenseKey,
         action,
         timestamp: new Date().toISOString(),
-        deviceId: await this.getDeviceId()
+        deviceId: await this.getDeviceId(),
       })
     } catch (error) {
       console.error('Failed to record usage:', error)

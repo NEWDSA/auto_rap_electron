@@ -5,6 +5,78 @@
       <p class="subtitle">管理您的软件许可证和订阅</p>
     </div>
 
+    <el-card class="account-card" shadow="hover" style="margin-bottom: 20px">
+      <template #header>
+        <div class="card-header">
+          <el-icon><User /></el-icon>
+          <span>账户信息</span>
+        </div>
+      </template>
+
+      <div class="account-content">
+        <div v-if="!isLoggedIn" class="login-section">
+          <p>登录账户以同步您的许可状态</p>
+          <el-button type="primary" @click="showLoginDialog = true">登录 / 注册</el-button>
+        </div>
+
+        <div v-else class="user-info">
+          <div class="info-row">
+            <span class="label">当前用户：</span>
+            <span class="value">{{ currentUser.email }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">许可状态：</span>
+            <el-tag :type="currentUser.isPaid ? 'success' : 'warning'">
+              {{ currentUser.isPaid ? '已激活 (专业版)' : '未激活' }}
+            </el-tag>
+          </div>
+          <div v-if="currentUser.isPaid" class="info-row">
+            <span class="label">有效期至：</span>
+            <span class="value">{{ formatDate(currentUser.expireAt) }}</span>
+          </div>
+
+          <div class="actions" style="margin-top: 15px">
+            <el-button v-if="!currentUser.isPaid" type="success" @click="handlePurchase"
+              >购买专业版</el-button
+            >
+            <el-button type="info" plain @click="handleLogout">退出登录</el-button>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 登录对话框 -->
+    <el-dialog v-model="showLoginDialog" title="登录 / 注册" width="400px">
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="登录" name="login">
+          <el-form :model="loginForm" label-width="60px">
+            <el-form-item label="邮箱">
+              <el-input v-model="loginForm.email"></el-input>
+            </el-form-item>
+            <el-form-item label="密码">
+              <el-input v-model="loginForm.password" type="password"></el-input>
+            </el-form-item>
+          </el-form>
+          <div style="text-align: right; margin-top: 20px">
+            <el-button type="primary" :loading="loading" @click="handleLogin">登录</el-button>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="注册" name="register">
+          <el-form :model="registerForm" label-width="60px">
+            <el-form-item label="邮箱">
+              <el-input v-model="registerForm.email"></el-input>
+            </el-form-item>
+            <el-form-item label="密码">
+              <el-input v-model="registerForm.password" type="password"></el-input>
+            </el-form-item>
+          </el-form>
+          <div style="text-align: right; margin-top: 20px">
+            <el-button type="primary" :loading="loading" @click="handleRegister">注册</el-button>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+
     <!-- 当前许可证状态 -->
     <el-card class="status-card" shadow="hover">
       <template #header>
@@ -13,7 +85,7 @@
           <span>当前许可证状态</span>
         </div>
       </template>
-      
+
       <div class="status-content">
         <div class="status-item">
           <span class="label">许可证类型：</span>
@@ -21,27 +93,32 @@
             {{ licenseStatus.type }}
           </el-tag>
         </div>
-        
+
         <div class="status-item">
           <span class="label">状态：</span>
           <el-tag :type="getStatusTagType(licenseStatus.status)" size="large">
             {{ licenseStatus.status }}
           </el-tag>
         </div>
-        
-        <div class="status-item" v-if="licenseStatus.expiresAt">
+
+        <div v-if="licenseStatus.expiresAt" class="status-item">
           <span class="label">到期时间：</span>
           <span class="value">{{ formatDate(licenseStatus.expiresAt) }}</span>
         </div>
-        
+
         <div class="status-item">
           <span class="label">本月已执行：</span>
-          <span class="value">{{ licenseStatus.monthlyExecutions }} / {{ licenseStatus.monthlyLimit === -1 ? '无限制' : licenseStatus.monthlyLimit }}</span>
+          <span class="value"
+            >{{ licenseStatus.monthlyExecutions }} /
+            {{ licenseStatus.monthlyLimit === -1 ? '无限制' : licenseStatus.monthlyLimit }}</span
+          >
         </div>
-        
+
         <div class="status-item">
           <span class="label">节点限制：</span>
-          <span class="value">{{ licenseStatus.nodeLimit === -1 ? '无限制' : licenseStatus.nodeLimit }} 个</span>
+          <span class="value"
+            >{{ licenseStatus.nodeLimit === -1 ? '无限制' : licenseStatus.nodeLimit }} 个</span
+          >
         </div>
       </div>
     </el-card>
@@ -54,7 +131,7 @@
           <span>激活许可证</span>
         </div>
       </template>
-      
+
       <div class="activation-content">
         <el-input
           v-model="licenseKey"
@@ -66,22 +143,17 @@
             <el-icon><Key /></el-icon>
           </template>
         </el-input>
-        
+
         <div class="activation-buttons">
-          <el-button 
-            type="primary" 
-            size="large"
-            :loading="activating"
-            @click="activateLicense"
-          >
+          <el-button type="primary" size="large" :loading="activating" @click="activateLicense">
             激活许可证
           </el-button>
-          
-          <el-button 
-            type="info" 
+
+          <el-button
+            v-if="licenseStatus.type === '未激活' && !licenseStatus.hasStartedTrial"
+            type="info"
             size="large"
             @click="startTrial"
-            v-if="licenseStatus.type === '未激活' && !licenseStatus.hasStartedTrial"
           >
             开始7天试用
           </el-button>
@@ -97,7 +169,7 @@
           <span>版本功能对比</span>
         </div>
       </template>
-      
+
       <div class="comparison-table">
         <el-table :data="featureComparison" style="width: 100%">
           <el-table-column prop="feature" label="功能" width="200" />
@@ -134,7 +206,7 @@
           <span>购买许可证</span>
         </div>
       </template>
-      
+
       <div class="purchase-options">
         <div class="option-card professional">
           <h3>专业版</h3>
@@ -152,7 +224,7 @@
             立即购买
           </el-button>
         </div>
-        
+
         <div class="option-card enterprise">
           <h3>企业版</h3>
           <div class="price">¥999<span>/年</span></div>
@@ -173,340 +245,400 @@
     </el-card>
 
     <!-- 操作按钮 -->
-    <div class="actions" v-if="licenseStatus.type !== '未激活'">
-      <el-button type="info" @click="refreshLicenseStatus">
-        刷新许可证状态
-      </el-button>
+    <div v-if="licenseStatus.type !== '未激活'" class="actions">
+      <el-button type="info" @click="refreshLicenseStatus"> 刷新许可证状态 </el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Key, Unlock, Grid, Check, Close, ShoppingCart } from '@element-plus/icons-vue'
-import { licenseService } from '@/services/license-service'
+  import { ref, onMounted, reactive } from 'vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { Key, Unlock, Grid, User, ShoppingCart, Check, Close } from '@element-plus/icons-vue'
+  import { useLicense } from '@/composables/useLicense'
+  import { PaymentApi } from '@/api/payment'
+  import supabase from '@/utils/supabase'
 
-// 响应式数据
-const licenseKey = ref('')
-const activating = ref(false)
-const licenseStatus = ref(licenseService.getLicenseStatus())
+  const showLoginDialog = ref(false)
+  const activeTab = ref('login')
+  const loading = ref(false)
+  const isLoggedIn = ref(false)
+  const currentUser = reactive({
+    email: '',
+    isPaid: false,
+    expireAt: '',
+  })
 
-// 功能对比数据 - 基于 Auto RAP 项目实际功能
-const featureComparison = ref([
-  { feature: '基础录制回放', trial: true, professional: true, enterprise: true },
-  { feature: '任务执行次数', trial: '无限制(7天)', professional: '无限制', enterprise: '无限制' },
-  { feature: '流程节点数量', trial: '50个', professional: '50个', enterprise: '无限制' },
-  { feature: '浏览器自动化', trial: true, professional: true, enterprise: true },
-  { feature: '元素识别录制', trial: true, professional: true, enterprise: true },
-  { feature: 'AI 脚本生成', trial: true, professional: true, enterprise: true },
-  { feature: '验证码识别', trial: true, professional: true, enterprise: true },
-  { feature: '定时任务执行', trial: true, professional: true, enterprise: true },
-  { feature: '数据提取导出', trial: '高级', professional: '高级', enterprise: '高级' },
-  { feature: '截图功能', trial: true, professional: true, enterprise: true },
-  { feature: '键盘鼠标模拟', trial: true, professional: true, enterprise: true },
-  { feature: '循环控制', trial: true, professional: true, enterprise: true },
-  { feature: '条件分支', trial: true, professional: true, enterprise: true },
-  { feature: '云端同步', trial: true, professional: true, enterprise: true },
-  { feature: '团队协作', trial: false, professional: false, enterprise: true },
-  { feature: 'API 接口', trial: false, professional: false, enterprise: true },
-  { feature: '技术支持', trial: false, professional: true, enterprise: true }
-])
+  const loginForm = reactive({ email: '', password: '' })
+  const registerForm = reactive({ email: '', password: '' })
 
-// 激活许可证
-const activateLicense = async () => {
-  if (!licenseKey.value.trim()) {
-    ElMessage.error('请输入许可证密钥')
-    return
-  }
-  
-  activating.value = true
-  try {
-    const result = await licenseService.validateLicenseKey(licenseKey.value.trim())
-    if (result.success) {
-      licenseStatus.value = licenseService.getLicenseStatus()
-      licenseKey.value = ''
-    }
-  } catch (error) {
-    console.error('激活许可证失败:', error)
-  } finally {
-    activating.value = false
-  }
-}
+  const {
+    licenseStatus,
+    licenseKey,
+    activating,
+    activateLicense,
+    startTrial,
+    formatDate,
+    getTypeTagType,
+    getStatusTagType,
+  } = useLicense()
 
-// 开始试用
-const startTrial = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '确定要开始7天专业版试用吗？试用期间您可以使用所有专业版功能，包括AI脚本生成、验证码识别等。',
-      '开始试用',
-      {
-        confirmButtonText: '开始试用',
-        cancelButtonText: '取消',
-        type: 'info',
+  // 功能对比数据 - 基于 Auto RAP 项目实际功能
+  const featureComparison = ref([
+    { feature: '基础录制回放', trial: true, professional: true, enterprise: true },
+    { feature: '任务执行次数', trial: '无限制(7天)', professional: '无限制', enterprise: '无限制' },
+    { feature: '流程节点数量', trial: '50个', professional: '50个', enterprise: '无限制' },
+    { feature: '浏览器自动化', trial: true, professional: true, enterprise: true },
+    { feature: '元素识别录制', trial: true, professional: true, enterprise: true },
+    { feature: 'AI 脚本生成', trial: true, professional: true, enterprise: true },
+    { feature: '验证码识别', trial: true, professional: true, enterprise: true },
+    { feature: '定时任务执行', trial: true, professional: true, enterprise: true },
+    { feature: '数据提取导出', trial: '高级', professional: '高级', enterprise: '高级' },
+    { feature: '截图功能', trial: true, professional: true, enterprise: true },
+    { feature: '键盘鼠标模拟', trial: true, professional: true, enterprise: true },
+    { feature: '循环控制', trial: true, professional: true, enterprise: true },
+    { feature: '条件分支', trial: true, professional: true, enterprise: true },
+    { feature: '云端同步', trial: true, professional: true, enterprise: true },
+    { feature: '团队协作', trial: false, professional: false, enterprise: true },
+    { feature: 'API 接口', trial: false, professional: false, enterprise: true },
+    { feature: '技术支持', trial: false, professional: true, enterprise: true },
+  ])
+
+  const fetchUserInfo = async () => {
+    try {
+      const res = await PaymentApi.getUserInfo()
+      if (res.data.code === 200) {
+        const user = res.data.data
+        isLoggedIn.value = true
+        currentUser.email = user.email
+        currentUser.isPaid = user.isPaid
+        currentUser.expireAt = user.expireAt
+      } else {
+        handleLogout()
       }
-    )
-    
-    // 导入 LicenseManager
-    const LicenseManager = (await import('@/utils/licenseManager')).default
-    
-    // 开始试用
-    LicenseManager.startTrial()
-    
-    // 重新初始化许可证状态
-    await licenseService.initializeLicense()
-    licenseStatus.value = licenseService.getLicenseStatus()
-    
-    ElMessage.success('试用已开始，享受7天专业版功能！')
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('开始试用失败:', error)
+    } catch (e) {
+      handleLogout()
     }
   }
-}
 
-// 刷新许可证状态
-const refreshLicenseStatus = async () => {
-  try {
-    // 重新初始化许可证状态
-    await licenseService.initializeLicense()
-    licenseStatus.value = licenseService.getLicenseStatus()
-    ElMessage.success('许可证状态已刷新')
-  } catch (error) {
-    console.error('刷新许可证状态失败:', error)
-    ElMessage.error('刷新失败，请检查网络连接')
+  const handleLogin = async () => {
+    loading.value = true
+    try {
+      if (!supabase) {
+        ElMessage.error('Supabase 未配置，请联系管理员')
+        return
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginForm.email,
+        password: loginForm.password,
+      })
+      if (error) throw error
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('无法获取 Supabase 会话')
+      const ex = await PaymentApi.supabaseExchange(session.access_token)
+      if (ex.data.code === 200) {
+        localStorage.setItem('auth_token', ex.data.data.token)
+        ElMessage.success('登录成功')
+        showLoginDialog.value = false
+        await fetchUserInfo()
+      } else {
+        ElMessage.error(ex.data.msg || '登录失败')
+      }
+    } catch (e: any) {
+      ElMessage.error(e.message || '登录失败')
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-// 打开购买链接
-const openPurchaseLink = (type: string) => {
-  const urls = {
-    professional: 'https://your-website.com/purchase/professional',
-    enterprise: 'https://your-website.com/purchase/enterprise'
+  const handleRegister = async () => {
+    loading.value = true
+    try {
+      if (!supabase) {
+        ElMessage.error('Supabase 未配置，请联系管理员')
+        return
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: registerForm.email,
+        password: registerForm.password,
+      })
+      if (error) throw error
+
+      // Check if email confirmation is required
+      if (!data.session && data.user) {
+        ElMessage.success('注册成功！请检查您的邮箱并点击激活链接')
+        activeTab.value = 'login'
+        return
+      }
+
+      // If session exists, proceed to login flow
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session?.access_token) throw new Error('无法获取 Supabase 会话')
+      const ex = await PaymentApi.supabaseExchange(session.access_token)
+      if (ex.data.code === 200) {
+        localStorage.setItem('auth_token', ex.data.data.token)
+        ElMessage.success('注册成功')
+        showLoginDialog.value = false
+        await fetchUserInfo()
+      } else {
+        ElMessage.error(ex.data.msg || '注册失败')
+      }
+    } catch (e: any) {
+      ElMessage.error(e.message || '注册失败')
+    } finally {
+      loading.value = false
+    }
   }
-  
-  ElMessage.info(`请访问 ${urls[type as keyof typeof urls]} 购买许可证`)
-}
 
-// 获取类型标签类型
-const getTypeTagType = (type: string) => {
-  switch (type) {
-    case '未激活': return 'danger'
-    case '试用版': return 'warning'
-    case '专业版': return 'success'
-    case '企业版': return 'primary'
-    default: return 'info'
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token')
+    isLoggedIn.value = false
+    currentUser.email = ''
+    currentUser.isPaid = false
   }
-}
 
-// 获取状态标签类型
-const getStatusTagType = (status: string) => {
-  switch (status) {
-    case '激活': return 'success'
-    case '试用': return 'warning'
-    case '已过期': return 'danger'
-    case '无效': return 'danger'
-    default: return 'info'
+  const handlePurchase = async () => {
+    try {
+      const res = await PaymentApi.createOrder()
+      if (res.data.code === 200) {
+        const { payUrl } = res.data.data
+        // Open payment URL in browser
+        window.electronAPI?.invoke('open-external', payUrl) || window.open(payUrl, '_blank')
+
+        ElMessageBox.confirm('支付完成后，请点击确认刷新状态', '支付提示', {
+          confirmButtonText: '支付已完成',
+          cancelButtonText: '稍后支付',
+          type: 'info',
+        })
+          .then(() => {
+            fetchUserInfo()
+          })
+          .catch(() => {})
+      } else {
+        ElMessage.error(res.data.msg || '创建订单失败')
+      }
+    } catch (e) {
+      ElMessage.error('创建订单失败')
+    }
   }
-}
 
-// 格式化日期
-const formatDate = (date: Date) => {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
-}
+  // 刷新许可证状态
+  const refreshLicenseStatus = async () => {
+    await fetchUserInfo()
+    ElMessage.success('状态已刷新')
+  }
 
-// 组件挂载时刷新状态
-onMounted(() => {
-  licenseStatus.value = licenseService.getLicenseStatus()
-})
+  // 打开购买链接
+  const openPurchaseLink = (type: string) => {
+    const urls = {
+      professional: 'https://your-website.com/purchase/professional',
+      enterprise: 'https://your-website.com/purchase/enterprise',
+    }
+
+    ElMessage.info(`请访问 ${urls[type as keyof typeof urls]} 购买许可证`)
+  }
+
+  onMounted(() => {
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      fetchUserInfo()
+    }
+  })
 </script>
 
 <style lang="postcss" scoped>
-.license-manager {
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
+  .license-manager {
+    padding: 18px;
+    color: var(--text-color);
+  }
 
-.header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
+  .header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
 
-.header h1 {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #2c3e50;
-  margin-bottom: 0.5rem;
-}
+  .header h1 {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--text-color);
+    margin-bottom: 0.5rem;
+  }
 
-.subtitle {
-  color: #7f8c8d;
-  font-size: 1.1rem;
-}
+  .subtitle {
+    color: var(--text-color-secondary);
+    font-size: 1.1rem;
+  }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-}
+  :deep(.el-card) {
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color-light);
+    background: var(--surface-color);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-tight);
+  }
 
-.status-card {
-  margin-bottom: 2rem;
-}
+  :deep(.el-card__header) {
+    border-bottom-color: var(--border-color-light);
+  }
 
-.status-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
-}
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+  }
 
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
+  .status-card {
+    margin-bottom: 2rem;
+  }
 
-.status-item .label {
-  font-weight: 500;
-  color: #606266;
-}
+  .status-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
 
-.status-item .value {
-  font-weight: 600;
-  color: #303133;
-}
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
 
-.activation-card {
-  margin-bottom: 2rem;
-}
+  .status-item .label {
+    font-weight: 500;
+    color: #606266;
+  }
 
-.activation-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+  .status-item .value {
+    font-weight: 600;
+    color: #303133;
+  }
 
-.license-input {
-  max-width: 400px;
-}
+  .activation-card {
+    margin-bottom: 2rem;
+  }
 
-.activation-buttons {
-  display: flex;
-  gap: 1rem;
-}
+  .activation-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
 
-.comparison-card {
-  margin-bottom: 2rem;
-}
+  .license-input {
+    max-width: 400px;
+  }
 
-.purchase-card {
-  margin-bottom: 2rem;
-}
+  .activation-buttons {
+    display: flex;
+    gap: 1rem;
+  }
 
-.purchase-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
-}
+  .comparison-card {
+    margin-bottom: 2rem;
+  }
 
-.option-card {
-  border: 2px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 2rem;
-  text-align: center;
-  transition: all 0.3s ease;
-}
+  .purchase-card {
+    margin-bottom: 2rem;
+  }
 
-.option-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
-}
+  .purchase-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+  }
 
-.option-card.professional {
-  border-color: #409eff;
-}
+  .option-card {
+    border: 2px solid #e4e7ed;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
 
-.option-card.enterprise {
-  border-color: #67c23a;
-}
+  .option-card:hover {
+    border-color: #409eff;
+    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+  }
 
-.option-card h3 {
-  font-size: 1.5rem;
-  font-weight: bold;
-  margin-bottom: 1rem;
-  color: #2c3e50;
-}
+  .option-card.professional {
+    border-color: #409eff;
+  }
 
-.price {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #409eff;
-  margin-bottom: 1.5rem;
-}
+  .option-card.enterprise {
+    border-color: #67c23a;
+  }
 
-.price span {
-  font-size: 1rem;
-  color: #909399;
-}
+  .option-card h3 {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    color: #2c3e50;
+  }
 
-.features {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 2rem 0;
-}
+  .price {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #409eff;
+    margin-bottom: 1.5rem;
+  }
 
-.features li {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #f0f0f0;
-  color: #606266;
-}
+  .price span {
+    font-size: 1rem;
+    color: #909399;
+  }
 
-.features li:last-child {
-  border-bottom: none;
-}
+  .features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 2rem 0;
+  }
 
-.actions {
-  text-align: center;
-  padding-top: 2rem;
-  border-top: 1px solid #e4e7ed;
-}
+  .features li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    color: #606266;
+  }
 
-/* 深色模式支持 */
-.dark .header h1 {
-  color: #e5e7eb;
-}
+  .features li:last-child {
+    border-bottom: none;
+  }
 
-.dark .subtitle {
-  color: #9ca3af;
-}
+  .actions {
+    text-align: center;
+    padding-top: 2rem;
+    border-top: 1px solid #e4e7ed;
+  }
 
-.dark .status-item .label {
-  color: #d1d5db;
-}
+  /* 深色模式支持 */
+  .dark .header h1 {
+    color: #e5e7eb;
+  }
 
-.dark .status-item .value {
-  color: #f3f4f6;
-}
+  .dark .subtitle {
+    color: #9ca3af;
+  }
 
-.dark .option-card {
-  background-color: #374151;
-  border-color: #4b5563;
-}
+  .dark .status-item .label {
+    color: #d1d5db;
+  }
 
-.dark .option-card h3 {
-  color: #f3f4f6;
-}
+  .dark .status-item .value {
+    color: #f3f4f6;
+  }
 
-.dark .features li {
-  color: #d1d5db;
-  border-bottom-color: #4b5563;
-}
+  .dark .option-card {
+    background-color: #374151;
+    border-color: #4b5563;
+  }
+
+  .dark .option-card h3 {
+    color: #f3f4f6;
+  }
+
+  .dark .features li {
+    color: #d1d5db;
+    border-bottom-color: #4b5563;
+  }
 </style>

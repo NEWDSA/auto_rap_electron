@@ -27,4 +27,4 @@ declare module '@element-plus/icons-vue' {
 }
 
 declare module '@logicflow/core/dist/style/index.css'
-declare module '@logicflow/extension/lib/style/index.css' 
+declare module '@logicflow/extension/lib/style/index.css'

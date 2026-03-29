@@ -1,51 +1,80 @@
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full designer-shell">
     <!-- 顶部工具栏 -->
-    <div class="p-2 flex items-center space-x-2 bg-[#fafafa] bg-opacity-80 backdrop-blur-sm border-b relative z-10">
-      <div class="absolute inset-0 opacity-10 bg-grid"></div>
-      <div class="flex relative items-center space-x-4">
-        <el-button-group>
-          <el-button type="primary" @click="handleSave">
-            <el-icon><Document /></el-icon>
-            保存
-          </el-button>
-          <el-button 
-            type="success" 
-            :loading="isRunning" 
-            @click="handleRun"
-            v-if="!isRunning"
-          >
-            <el-icon><VideoPlay /></el-icon>
-            运行
-          </el-button>
-          <el-button 
-            type="danger" 
-            @click="handleStop"
-            v-else
-          >
-            <el-icon><VideoPause /></el-icon>
-            停止
-          </el-button>
-        </el-button-group>
+    <div class="designer-topbar">
+      <div class="absolute inset-0 designer-topbar-grid"></div>
+      <div class="relative flex items-center justify-between w-full gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="designer-title">
+            <div class="designer-title__label">流程设计</div>
+            <div class="designer-title__hint">拖拽节点到画布，连接边生成流程</div>
+          </div>
 
-        <el-divider direction="vertical" />
-        
-        <!-- 添加智能录制按钮 -->
-        <el-button type="primary" @click="showRecorder = true">
-          <el-icon><VideoCamera /></el-icon>
-          智能录制
-        </el-button>
-        
-        <!-- 添加 AI 助手按钮 -->
-        <el-button type="success" @click="showAIAssistant = true">
-          <el-icon><Cpu /></el-icon>
-          AI 助手
-        </el-button>
+          <div class="designer-title__sep"></div>
+
+          <el-input
+            v-model="flowName"
+            size="small"
+            class="designer-name"
+            placeholder="未命名流程"
+            clearable
+          />
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <el-button-group>
+            <el-button type="primary" @click="handleSave">
+              <el-icon><Document /></el-icon>
+              保存
+            </el-button>
+            <el-button type="success" :loading="isRunning" @click="handleRun" v-if="!isRunning">
+              <el-icon><VideoPlay /></el-icon>
+              运行
+            </el-button>
+            <el-button type="danger" @click="handleStop" v-else>
+              <el-icon><VideoPause /></el-icon>
+              停止
+            </el-button>
+          </el-button-group>
+
+          <el-button-group>
+            <el-button :disabled="!canUndo" @click="handleUndo">
+              <el-icon><RefreshLeft /></el-icon>
+            </el-button>
+            <el-button :disabled="!canRedo" @click="handleRedo">
+              <el-icon><RefreshRight /></el-icon>
+            </el-button>
+          </el-button-group>
+
+          <el-button-group>
+            <el-button @click="handleZoomOut">
+              <el-icon><Remove /></el-icon>
+            </el-button>
+            <el-button @click="handleFitView">
+              <el-icon><FullScreen /></el-icon>
+            </el-button>
+            <el-button @click="handleZoomIn">
+              <el-icon><CirclePlus /></el-icon>
+            </el-button>
+          </el-button-group>
+
+          <el-divider direction="vertical" />
+
+          <el-button class="designer-cta" type="primary" @click="showRecorder = true">
+            <el-icon><VideoCamera /></el-icon>
+            智能录制
+          </el-button>
+
+          <el-button class="designer-cta" type="success" @click="showAIAssistant = true">
+            <el-icon><Cpu /></el-icon>
+            AI 助手
+          </el-button>
+        </div>
       </div>
     </div>
 
     <!-- 主要内容区域 -->
-    <div class="flex relative flex-1">
+    <div class="flex relative flex-1 designer-body">
       <!-- 左侧工具箱 -->
       <div 
         class="left-toolbox"
@@ -61,7 +90,14 @@
         </div>
         
         <div class="toolbox-content" v-show="!toolsPanelCollapsed">
-          <div class="p-2">
+          <div class="p-3">
+            <el-input
+              v-model="nodeSearch"
+              size="small"
+              placeholder="搜索节点"
+              clearable
+              class="mb-3"
+            />
             <el-collapse v-model="activeCategories">
               <el-collapse-item title="基础组件" name="basic">
                 <template #title>
@@ -70,14 +106,19 @@
                 </template>
                 <div class="space-y-1">
                   <div
-                    v-for="node in basicNodes"
+                    v-for="node in filteredBasicNodes"
                     :key="node.type"
-                    class="p-2 rounded cursor-move component-item hover:bg-gray-100"
+                    class="component-item"
                     draggable="true"
                     @dragstart="handleDragStart($event, node)"
                   >
-                    <el-icon><component :is="node.icon" /></el-icon>
-                    <span class="ml-2">{{ node.name }}</span>
+                    <div class="component-item__icon">
+                      <el-icon><component :is="node.icon" /></el-icon>
+                    </div>
+                    <div class="component-item__meta">
+                      <div class="component-item__name">{{ node.name }}</div>
+                      <div class="component-item__type">{{ node.type }}</div>
+                    </div>
                   </div>
                 </div>
               </el-collapse-item>
@@ -89,14 +130,19 @@
                 </template>
                 <div class="space-y-1">
                   <div
-                    v-for="node in controlNodes"
+                    v-for="node in filteredControlNodes"
                     :key="node.type"
-                    class="p-2 rounded cursor-move component-item hover:bg-gray-100"
+                    class="component-item"
                     draggable="true"
                     @dragstart="handleDragStart($event, node)"
                   >
-                    <el-icon><component :is="node.icon" /></el-icon>
-                    <span class="ml-2">{{ node.name }}</span>
+                    <div class="component-item__icon">
+                      <el-icon><component :is="node.icon" /></el-icon>
+                    </div>
+                    <div class="component-item__meta">
+                      <div class="component-item__name">{{ node.name }}</div>
+                      <div class="component-item__type">{{ node.type }}</div>
+                    </div>
                   </div>
                 </div>
               </el-collapse-item>
@@ -131,22 +177,35 @@
       </div>
 
       <!-- 右侧属性面板 -->
-      <div 
-        v-if="selectedNode"
+      <div
         class="properties-panel"
-        :class="{ 'w-64': !propertiesPanelCollapsed, 'w-0': propertiesPanelCollapsed }"
+        :class="{ 'w-[400px]': !propertiesPanelCollapsed, 'w-0': propertiesPanelCollapsed }"
       >
         <div class="panel-header">
-          <span class="text-sm">属性设置</span>
-          <el-button link @click="selectedNode = null">
-            <el-icon><Close /></el-icon>
-          </el-button>
+          <div class="panel-header__left">
+            <div class="panel-title">属性</div>
+            <div class="panel-sub" v-if="selectedNode">
+              <span class="panel-sub__name">{{ selectedNode.properties.name || selectedNode.text }}</span>
+              <span class="panel-sub__type">{{ selectedNode.type }}</span>
+            </div>
+            <div class="panel-sub" v-else>
+              <span class="panel-sub__muted">选择一个节点以编辑属性</span>
+            </div>
+          </div>
+          <div class="panel-header__right">
+            <el-button link @click="propertiesPanelCollapsed = !propertiesPanelCollapsed">
+              <el-icon><component :is="propertiesPanelCollapsed ? 'ArrowLeft' : 'ArrowRight'" /></el-icon>
+            </el-button>
+            <el-button v-if="selectedNode" link @click="selectedNode = null">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
         </div>
         
-        <div class="p-4 panel-content">
+        <div class="p-4 panel-content" v-if="selectedNode">
           <el-form label-position="top">
             <el-form-item label="节点名称">
-              <el-input 
+              <el-input
                 v-model="selectedNode.properties.name"
                 @change="handleNodePropertyChange('name')"
               />
@@ -160,12 +219,23 @@
             />
           </el-form>
         </div>
+
+        <div class="p-4 panel-empty" v-else>
+          <div class="panel-empty__card">
+            <div class="panel-empty__title">未选择节点</div>
+            <div class="panel-empty__desc">从左侧拖拽节点到画布，然后点击节点进行配置</div>
+            <div class="panel-empty__actions">
+              <el-button type="primary" @click="showRecorder = true">智能录制</el-button>
+              <el-button @click="showAIAssistant = true">AI 助手</el-button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 底部状态栏 -->
-    <div class="flex items-center h-8 bg-gray-50 border-t">
-      <span class="text-sm text-gray-500">{{ statusText }}</span>
+    <div class="designer-statusbar">
+      <span class="text-sm" style="color: var(--text-color-secondary)">{{ statusText }}</span>
     </div>
   </div>
   
@@ -183,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, h, computed, markRaw, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, markRaw, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import LogicFlow, { 
   NodeModel,
@@ -214,7 +284,8 @@ import {
   RefreshRight,
   VideoCamera,
   Cpu,
-  Key
+  Key,
+  Message
 } from '@element-plus/icons-vue'
 import type { NodeConfigComponent, FlowNode, NodeConfig } from '@/types/node-config'
 import type { BaseNodeData, BaseEdgeData } from '@/types/node-config'
@@ -238,6 +309,10 @@ import ExportConfig from '@/components/node-configs/ExportConfig.vue'
 import CaptchaConfig from '@/components/node-configs/CaptchaConfig.vue'
 import PowerConfig from '@/components/node-configs/PowerConfig.vue'
 import FileReaderConfig from '@/components/node-configs/FileReaderConfig.vue'
+import VoiceConfig from '@/components/node-configs/VoiceConfig.vue'
+import EmailConfig from '@/components/node-configs/EmailConfig.vue'
+import VideoDownloadConfig from '@/components/node-configs/VideoDownloadConfig.vue'
+import VideoConvertConfig from '@/components/node-configs/VideoConvertConfig.vue'
 
 // 类型定义
 import type { LogicFlowApi, LogicFlowEvents } from '@/types/node-config'
@@ -288,6 +363,10 @@ const basicNodes: NodeConfig[] = [
   { type: 'export', name: '导出', icon: 'Download' },
   { type: 'power', name: '系统电源', icon: 'SwitchButton' },
   { type: 'fileReader', name: '文件读取', icon: 'Document' },
+  { type: 'voice', name: '语音合成', icon: 'Microphone' },
+  { type: 'email', name: '发送邮件', icon: 'Message' },
+  { type: 'video-download', name: '视频下载', icon: 'Download' },
+  { type: 'video-convert', name: '视频转换', icon: 'RefreshRight' },
   { type: 'end', name: '结束', icon: 'VideoPause' }
 ]
 
@@ -295,6 +374,20 @@ const controlNodes: NodeConfig[] = [
   { type: 'switch', name: '条件', icon: 'SwitchButton' },
   { type: 'loop', name: '循环', icon: 'RefreshRight' }
 ]
+
+const nodeSearch = ref('')
+
+const filteredBasicNodes = computed(() => {
+  const q = nodeSearch.value.trim().toLowerCase()
+  if (!q) return basicNodes
+  return basicNodes.filter(n => `${n.name}${n.type}`.toLowerCase().includes(q))
+})
+
+const filteredControlNodes = computed(() => {
+  const q = nodeSearch.value.trim().toLowerCase()
+  if (!q) return controlNodes
+  return controlNodes.filter(n => `${n.name}${n.type}`.toLowerCase().includes(q))
+})
 
 // 获取节点配置组件
 const nodeConfigComponent = computed(() => {
@@ -315,7 +408,11 @@ const nodeConfigComponent = computed(() => {
     scroll: ScrollConfig,
     export: ExportConfig,
     power: PowerConfig,
-    fileReader: FileReaderConfig
+    fileReader: FileReaderConfig,
+    voice: VoiceConfig,
+    email: EmailConfig,
+    'video-download': VideoDownloadConfig,
+    'video-convert': VideoConvertConfig
   } as const
 
   const component = componentMap[selectedNode.value.type as keyof typeof componentMap]
@@ -506,7 +603,7 @@ const registerNodes = () => {
             initNodeData(data: any) {
               super.initNodeData(data);
               this.width = 120;
-              this.height = 40;
+              this.height = 44; 
               this.radius = 4;
               
               // 设置节点文本
@@ -550,6 +647,27 @@ const registerNodes = () => {
 
             getNodeStyle() {
               const style = super.getNodeStyle();
+              const properties = this.properties;
+              
+              // 根据进度改变边框颜色
+              if (properties.progress !== undefined) {
+                if (properties.progress >= 100) {
+                  return {
+                    ...style,
+                    fill: '#f0f9eb',
+                    stroke: '#67c23a',
+                    strokeWidth: 2
+                  };
+                } else if (properties.progress > 0) {
+                  return {
+                    ...style,
+                    fill: '#ecf5ff',
+                    stroke: '#409eff',
+                    strokeWidth: 2
+                  };
+                }
+              }
+              
               return {
                 ...style,
                 fill: '#fff',
@@ -857,6 +975,40 @@ const handleDrop = (event: DragEvent) => {
         incognito: false,
         width: 1280,
         height: 800
+      } : {}),
+      // 文件读取节点的默认属性
+      ...(dragNode.type === 'fileReader' ? {
+        filePath: '',
+        fileType: 'auto',
+        fileEncoding: 'auto',
+        outputVariable: 'fileContent',
+        includeMetadata: false,
+        extractImages: false,
+        extractTables: false
+      } : {}),
+      // 语音合成节点的默认属性
+      ...(dragNode.type === 'voice' ? {
+        voiceText: '',
+        voiceType: 'system',
+        language: 'zh-CN',
+        voice: '',
+        speed: 1.0,
+        pitch: 1.0,
+        volume: 0.8,
+        outputFile: '',
+        playImmediately: true
+      } : {}),
+      // 电源控制节点的默认属性
+      ...(dragNode.type === 'power' ? {
+        action: 'lock',
+        force: false
+      } : {}),
+      ...(dragNode.type === 'video-convert' ? {
+        inputPath: '',
+        outputFormat: 'mp4',
+        outputDir: '',
+        outputPath: '',
+        overwrite: true
       } : {})
     }
   }
@@ -1169,9 +1321,7 @@ const updateNodeName = () => {
 }
 
 // 更新节点属性
-const handleNodePropertyChange = (key: string) => {
-  console.log(key,'...内容变更...')
-  console.log(selectedNode.value.properties,'..rrrr...')
+const handleNodePropertyChange = (key?: string) => {
   if (!lf.value || !selectedNode.value) return
   
   // 更新节点属性
@@ -1179,9 +1329,19 @@ const handleNodePropertyChange = (key: string) => {
     ...selectedNode.value.properties
   })
 
-  // 如果是名称变更，同时更新节点文本
-  if (key === 'name') {
-    lf.value.updateText(selectedNode.value.id, selectedNode.value.properties.name)
+  // 如果是名称变更，或者视频下载进度变更，更新节点文本
+  const isVideoDownload = selectedNode.value.type === 'video-download'
+  if (key === 'name' || key === 'properties' || isVideoDownload) {
+    const name = selectedNode.value.properties.name || (isVideoDownload ? '视频下载' : '')
+    const progress = selectedNode.value.properties.progress
+    
+    let newText = name
+    if (isVideoDownload && progress !== undefined && progress > 0 && progress < 100) {
+      const baseName = name.split('(')[0].trim()
+      newText = `${baseName} (${Math.floor(progress)}%)`
+    }
+    
+    lf.value.updateText(selectedNode.value.id, newText)
   }
 }
 
@@ -1421,6 +1581,34 @@ onMounted(async () => {
     flowContainer.value.addEventListener('dragover', handleDragOver)
     flowContainer.value.addEventListener('drop', handleDrop)
   }
+
+  // 监听节点进度
+   if (window.electronAPI) {
+     window.electronAPI.on('node:progress', (event: any, { nodeId, progress, status }: any) => {
+       if (!lf.value) return
+       
+       console.log(`[Progress] Node ${nodeId}: ${progress}% - ${status}`)
+       
+       // 尝试获取节点模型
+       const nodeModel = lf.value.getNodeModelById(nodeId)
+       
+       if (nodeModel) {
+         // 更新节点属性
+         // setProperties 会触发 LogicFlow 内部的状态更新和重绘
+         lf.value.setProperties(nodeId, {
+           progress,
+           status
+         })
+         
+         // 更新节点文本显示进度
+         const originalName = nodeModel.properties.name || '视频下载'
+         const baseName = originalName.split('(')[0].trim()
+         const newText = progress >= 100 ? baseName : `${baseName} (${Math.floor(progress)}%)`
+         
+         lf.value.updateText(nodeId, newText)
+       }
+     })
+   }
 });
 
 onUnmounted(() => {
@@ -1584,15 +1772,139 @@ if (lf.value) {
 </script>
 
 <style lang="postcss" scoped>
+.designer-shell {
+  background:
+    radial-gradient(900px 520px at 15% 0%, rgba(64, 158, 255, 0.16), transparent 55%),
+    radial-gradient(800px 480px at 100% 10%, rgba(103, 194, 58, 0.10), transparent 55%),
+    var(--background-color);
+}
+
+.designer-topbar {
+  @apply p-2 flex items-center space-x-2 border-b relative z-10;
+  background: linear-gradient(180deg, var(--surface-color), rgba(255, 255, 255, 0.55));
+  border-bottom: 1px solid var(--border-color-light);
+  backdrop-filter: blur(12px);
+  height: 56px;
+  overflow: hidden;
+}
+
+.designer-title {
+  @apply flex flex-col;
+  line-height: 1.1;
+}
+
+.designer-title__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-color);
+  letter-spacing: 0.2px;
+}
+
+.designer-title__hint {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-color-secondary);
+}
+
+.designer-title__sep {
+  width: 1px;
+  height: 26px;
+  background: var(--border-color-light);
+}
+
+.designer-name {
+  width: 260px;
+}
+
+.designer-cta {
+  border-radius: 12px;
+}
+
+.dark .designer-topbar {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.70), rgba(15, 23, 42, 0.46));
+}
+
+.designer-topbar-grid {
+  opacity: 0.16;
+  background-image: var(--grid-dot);
+  background-size: 18px 18px;
+}
+
+.designer-statusbar {
+  @apply flex items-center h-8 border-t;
+  background: var(--surface-muted);
+  border-top: 1px solid var(--border-color-light);
+  backdrop-filter: blur(12px);
+}
+
+.designer-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .designer-container {
   @apply h-full flex flex-col;
   --header-height: 64px;
   --footer-height: 32px;
-  --toolbar-height: 44px;
+  --toolbar-height: 56px;
 }
 
 .component-item {
-  @apply flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded cursor-move hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors;
+  @apply flex items-center cursor-move select-none;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color-light);
+  background: rgba(255, 255, 255, 0.35);
+  transition: transform 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dark .component-item {
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.component-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-tight);
+  background: rgba(64, 158, 255, 0.08);
+}
+
+.component-item:active {
+  transform: translateY(0px);
+}
+
+.component-item__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(64, 158, 255, 0.22);
+  background: linear-gradient(180deg, rgba(64, 158, 255, 0.18), rgba(64, 158, 255, 0.05));
+}
+
+.component-item__meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.component-item__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.component-item__type {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .custom-node {
@@ -1622,45 +1934,165 @@ if (lf.value) {
 
 /* 左侧工具箱 */
 .left-toolbox {
-  @apply border-r bg-white flex flex-col transition-all duration-300;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+  @apply border-r flex flex-col transition-all duration-300;
+  background: var(--surface-color);
+  border-right: 1px solid var(--border-color-light);
+  backdrop-filter: blur(14px);
+  min-height: 0;
 
   .toolbox-header {
-    @apply p-2 border-b flex items-center justify-between;
-    height: 40px;
+    @apply border-b flex items-center justify-between;
+    border-bottom-color: var(--border-color-light);
+    height: 56px;
+    padding: 10px 12px;
   }
 
   .toolbox-content {
     @apply flex-1 overflow-y-auto;
-    height: calc(100% - 40px);
+    min-height: 0;
+    overscroll-behavior: contain;
   }
 }
 
 /* 右侧属性面板 */
 .properties-panel {
-  @apply border-l bg-white flex flex-col;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+  @apply border-l flex flex-col shadow-2xl relative z-20 overflow-hidden;
+  background: var(--surface-color);
+  border-left: 1px solid var(--border-color-light);
+  backdrop-filter: blur(16px);
   transition: width 0.3s ease-in-out;
+  min-height: 0;
 
   .panel-header {
-    @apply p-2 border-b flex items-center justify-between;
-    height: 40px;
+    @apply border-b flex items-center justify-between;
+    border-bottom-color: var(--border-color-light);
+    height: 56px;
+    padding: 10px 12px;
   }
 
   .panel-content {
     @apply flex-1 overflow-y-auto;
-    height: calc(100% - 40px);
+    min-height: 0;
   }
+}
+
+.panel-header__left {
+  min-width: 0;
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text-color);
+}
+
+.panel-sub {
+  margin-top: 3px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.panel-sub__name {
+  font-size: 12px;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.panel-sub__type {
+  font-size: 11px;
+  color: var(--text-color-secondary);
+  border: 1px solid var(--border-color-light);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--surface-muted);
+}
+
+.panel-sub__muted {
+  font-size: 12px;
+  color: var(--text-color-secondary);
+}
+
+.panel-header__right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.panel-empty {
+  height: calc(100% - 56px);
+}
+
+.panel-empty__card {
+  border: 1px dashed var(--border-color);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.dark .panel-empty__card {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.panel-empty__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.panel-empty__desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-color-secondary);
+  line-height: 1.45;
+}
+
+.panel-empty__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
 }
 
 /* 中间画布区域 */
 .designer-canvas {
   @apply flex-1 relative;
-  height: calc(100vh - var(--header-height) - var(--toolbar-height) - var(--footer-height));
+  min-height: 0;
+  overflow: hidden;
   
   .canvas-container {
     @apply w-full h-full;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.35);
+    border: 1px solid var(--border-color-light);
+    box-shadow: var(--shadow-soft);
   }
+}
+
+@media (max-width: 1100px) {
+  .designer-title__hint {
+    display: none;
+  }
+  .designer-name {
+    width: 180px;
+  }
+}
+
+.dark .designer-canvas .canvas-container {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+:deep(.el-form-item__label) {
+  color: var(--text-color-secondary);
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  border-radius: 12px;
 }
 
 /* 底部状态栏样式 */

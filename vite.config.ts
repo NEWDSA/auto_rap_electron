@@ -18,7 +18,7 @@ export default defineConfig({
             sourcemap: true,
             minify: false,
             rollupOptions: {
-              external: ['sqlite3'],
+              external: ['sqlite3', 'nodemailer'],
               plugins: [
                 commonjs({
                   dynamicRequireTargets: [
@@ -57,6 +57,13 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
   build: {
     outDir: 'dist',

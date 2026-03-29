@@ -1,16 +1,16 @@
 declare module '@logicflow/core' {
   export default class LogicFlow {
     constructor(options: {
-      container: HTMLElement;
-      grid?: boolean;
-      plugins?: any[];
-      nodeTextEdit?: boolean;
-      edgeTextEdit?: boolean;
-      nodeTextDraggable?: boolean;
-      edgeTextDraggable?: boolean;
-      adjustNodePosition?: boolean;
-      snapline?: boolean;
-      style?: Record<string, any>;
+      container: HTMLElement
+      grid?: boolean
+      plugins?: any[]
+      nodeTextEdit?: boolean
+      edgeTextEdit?: boolean
+      nodeTextDraggable?: boolean
+      edgeTextDraggable?: boolean
+      adjustNodePosition?: boolean
+      snapline?: boolean
+      style?: Record<string, any>
     })
     render(): void
     destroy(): void
@@ -32,7 +32,7 @@ declare module '@logicflow/core' {
     updateText(id: string, text: string): void
     extension: {
       miniMap: {
-        init(config: { container: HTMLElement, width: number, height: number }): void
+        init(config: { container: HTMLElement; width: number; height: number }): void
       }
     }
   }
@@ -105,4 +105,4 @@ declare module '@logicflow/core' {
     nodes: any[]
     edges: any[]
   }
-} 
+}

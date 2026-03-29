@@ -21,4 +21,4 @@ declare global {
   interface Window {
     electronAPI: IpcAPI
   }
-} 
+}

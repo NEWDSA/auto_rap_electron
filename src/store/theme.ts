@@ -5,9 +5,9 @@ import { useDark, useToggle } from '@vueuse/core'
 declare global {
   interface Element {
     __vue__?: {
-      doLayout?: () => void;
-      [key: string]: any;
-    };
+      doLayout?: () => void
+      [key: string]: any
+    }
   }
 }
 
@@ -22,7 +22,7 @@ export const useThemeStore = defineStore('theme', () => {
       const htmlEl = document.querySelector('html')
       if (htmlEl) {
         htmlEl.className = dark ? 'dark' : ''
-        
+
         // 设置背景颜色
         if (dark) {
           // 黑夜模式 - 设置深灰背景
@@ -44,7 +44,7 @@ export const useThemeStore = defineStore('theme', () => {
           document.documentElement.style.setProperty('--el-fill-color-blank', '#121212')
           document.documentElement.style.setProperty('--el-border-color', '#333333')
           document.documentElement.style.setProperty('--el-border-color-light', '#444444')
-          
+
           // 添加更精细的深色模式样式 - 使用类选择器而不是直接操作DOM
           const styleId = 'dark-mode-style'
           if (!document.getElementById(styleId)) {
@@ -668,33 +668,33 @@ export const useThemeStore = defineStore('theme', () => {
           document.documentElement.style.removeProperty('--el-fill-color-blank')
           document.documentElement.style.removeProperty('--el-border-color')
           document.documentElement.style.removeProperty('--el-border-color-light')
-          
+
           // 移除暗色模式的全局样式
           const darkModeStyle = document.getElementById('dark-mode-style')
           if (darkModeStyle) {
             darkModeStyle.remove()
           }
         }
-        
+
         // 简单触发窗口resize事件
         window.dispatchEvent(new Event('resize'))
       }
-    }
+    },
   })
 
   const toggleDark = useToggle(isDark)
-  
+
   // 简化后的切换函数
   const toggleDarkEnhanced = () => {
     toggleDark()
-    
+
     // 多次触发resize事件，确保UI组件都能完全响应主题变化
     // 延迟不同时间点触发，确保覆盖所有可能的组件初始化或更新时机
     const delays = [50, 200, 500]
     delays.forEach((delay: number) => {
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'))
-        
+
         // 强制刷新可能存在的表格组件
         document.querySelectorAll('.el-table').forEach((table: Element) => {
           if (table instanceof HTMLElement && table.classList.contains('el-table')) {
@@ -709,6 +709,6 @@ export const useThemeStore = defineStore('theme', () => {
 
   return {
     isDark,
-    toggleDark: toggleDarkEnhanced
+    toggleDark: toggleDarkEnhanced,
   }
-}) 
+})

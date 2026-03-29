@@ -21,13 +21,16 @@ declare module '@logicflow/core' {
   interface LogicFlowEvents {
     'element:click': { data: LogicFlowProperties }
     'blank:click': void
-    'history:change': { undoAble: boolean, redoAble: boolean }
+    'history:change': { undoAble: boolean; redoAble: boolean }
   }
 
   export default class LogicFlow {
     constructor(options: LogicFlowOptions)
     render(): void
-    on<K extends keyof LogicFlowEvents>(event: K, callback: (data: LogicFlowEvents[K]) => void): void
+    on<K extends keyof LogicFlowEvents>(
+      event: K,
+      callback: (data: LogicFlowEvents[K]) => void
+    ): void
     register(config: any): void
     setProperties(id: string, properties: any): void
     getGraphData(): any
@@ -36,33 +39,33 @@ declare module '@logicflow/core' {
     destroy(): void
     extension: {
       miniMap: {
-        init(options: { container: HTMLElement, width?: number, height?: number }): void
+        init(options: { container: HTMLElement; width?: number; height?: number }): void
       }
     }
   }
 
   class RectNodeModel {
-    width: number;
-    height: number;
-    radius: number;
-    fill: string;
-    stroke: string;
-    strokeWidth: number;
+    width: number
+    height: number
+    radius: number
+    fill: string
+    stroke: string
+    strokeWidth: number
     text: {
-      value: string;
-      x: number;
-      y: number;
-      fontSize: number;
-      color: string;
-      textAlign: string;
-      textBaseline: string;
-    };
-    getNodeStyle(): Record<string, any>;
+      value: string
+      x: number
+      y: number
+      fontSize: number
+      color: string
+      textAlign: string
+      textBaseline: string
+    }
+    getNodeStyle(): Record<string, any>
   }
 
   interface BezierEdgeModel {
-    strokeWidth: number;
-    getEdgeStyle(): Record<string, any>;
+    strokeWidth: number
+    getEdgeStyle(): Record<string, any>
   }
 }
 
@@ -88,4 +91,4 @@ interface FlowNode {
 
 interface DragEvent extends Event {
   dataTransfer?: DataTransfer
-} 
+}

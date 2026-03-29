@@ -15,4 +15,4 @@ declare global {
 
 export async function getStats(): Promise<StatsData> {
   return await window.electronAPI.invoke('get-stats')
-} 
+}

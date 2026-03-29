@@ -1,10 +1,7 @@
 <template>
   <div class="loop-config">
     <el-form-item label="循环类型">
-      <el-select
-        v-model="props.node.properties.loopType"
-        @change="handleChange('loopType')"
-      >
+      <el-select v-model="props.node.properties.loopType" @change="handleChange('loopType')">
         <el-option label="固定次数" value="count" />
         <el-option label="元素列表" value="elements" />
         <el-option label="条件循环" value="condition" />
@@ -24,10 +21,7 @@
 
     <template v-if="props.node.properties.loopType === 'elements'">
       <el-form-item label="选择器">
-        <el-input
-          v-model="props.node.properties.selector"
-          @change="handleChange('selector')"
-        />
+        <el-input v-model="props.node.properties.selector" @change="handleChange('selector')" />
       </el-form-item>
       <el-form-item label="变量名">
         <el-input
@@ -39,10 +33,7 @@
 
     <template v-if="props.node.properties.loopType === 'condition'">
       <el-form-item label="条件类型">
-        <el-select
-          v-model="props.node.properties.condition"
-          @change="handleChange('condition')"
-        >
+        <el-select v-model="props.node.properties.condition" @change="handleChange('condition')">
           <el-option label="元素存在" value="exists" />
           <el-option label="元素不存在" value="notExists" />
           <el-option label="元素可见" value="visible" />
@@ -50,10 +41,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="选择器">
-        <el-input
-          v-model="props.node.properties.selector"
-          @change="handleChange('selector')"
-        />
+        <el-input v-model="props.node.properties.selector" @change="handleChange('selector')" />
       </el-form-item>
       <el-form-item label="超时时间(秒)">
         <el-input-number
@@ -68,25 +56,25 @@
 </template>
 
 <script setup lang="ts">
-interface Props {
-  node: {
-    properties: {
-      loopType?: 'count' | 'elements' | 'condition'
-      count?: number
-      selector?: string
-      variableName?: string
-      condition?: 'exists' | 'notExists' | 'visible' | 'notVisible'
-      timeout?: number
+  interface Props {
+    node: {
+      properties: {
+        loopType?: 'count' | 'elements' | 'condition'
+        count?: number
+        selector?: string
+        variableName?: string
+        condition?: 'exists' | 'notExists' | 'visible' | 'notVisible'
+        timeout?: number
+      }
     }
   }
-}
 
-const props = defineProps<Props>()
-const emit = defineEmits<{
-  (e: 'update', key: string): void
-}>()
+  const props = defineProps<Props>()
+  const emit = defineEmits<{
+    (e: 'update', key: string): void
+  }>()
 
-const handleChange = (key: string) => {
-  emit('update', key)
-}
-</script> 
+  const handleChange = (key: string) => {
+    emit('update', key)
+  }
+</script>

@@ -10,14 +10,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   invoke: (channel: string, ...args: any[]) => {
     // 白名单通道
     const validChannels = [
-      'flow:start', 
-      'flow:stop', 
-      'dialog:showSaveDialog', 
+      'flow:start',
+      'flow:stop',
+      'dialog:showSaveDialog',
       'dialog:showOpenDirectoryDialog',
-      'fs:writeFile', 
-      'open-browser', 
-      'element:startPicker', 
-      'extract:preview', 
+      'fs:writeFile',
+      'open-browser',
+      'element:startPicker',
+      'extract:preview',
       'window:toggleFullscreen',
       'save-configuration',
       'get-all-configurations',
@@ -52,7 +52,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       // 文件读取相关通道
       'file:read',
       'file:preview',
-      'dialog:openFile'
+      'dialog:openFile',
+      // 语音合成相关通道
+      'voice:speak',
+      'voice:stop',
+      // 邮件相关通道
+      'email:send',
+      // 视频下载测试通道
+      'video:download',
+      // 外部链接打开
+      'open-external',
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)
@@ -73,7 +82,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'scheduler:task-completed',
       'scheduler:task-failed',
       'scheduler:task-stopped',
-      'scheduler:task-scheduled'
+      'scheduler:task-scheduled',
+      // 自动化语音播放相关通道
+      'automation:speak',
+      'automation:speech-end',
+      'automation:speech-error',
+      // 节点进度相关通道
+      'node:progress',
+      // 视频下载进度通道
+      'video:progress',
     ]
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, callback)
@@ -86,7 +103,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   once: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
     ipcRenderer.once(channel, callback)
   },
-  removeListener: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
+  removeListener: (
+    channel: string,
+    callback: (event: IpcRendererEvent, ...args: any[]) => void
+  ) => {
     ipcRenderer.removeListener(channel, callback)
   },
 

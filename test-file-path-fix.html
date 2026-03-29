@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件路径修复测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .success {
+            background: #28a745;
+        }
+        .error {
+            background: #dc3545;
+        }
+        .info {
+            background: #17a2b8;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 文件路径修复测试</h1>
+        
+        <div class="test-section">
+            <h3>模拟节点属性更新</h3>
+            <p>这个测试模拟了节点配置组件的属性更新过程，验证文件路径不会被意外清空。</p>
+            
+            <div>
+                <label>文件路径:</label>
+                <input type="text" id="filePath" placeholder="输入文件路径" />
+            </div>
+            
+            <div>
+                <label>文件类型:</label>
+                <select id="fileType">
+                    <option value="auto">自动检测</option>
+                    <option value="pdf">PDF</option>
+                    <option value="txt">TXT</option>
+                    <option value="docx">DOCX</option>
+                </select>
+            </div>
+            
+            <button onclick="testPathPersistence()">测试路径持久性</button>
+            <button onclick="testPropertyUpdate()">测试属性更新</button>
+            <button onclick="testDefaultValueOverride()">测试默认值覆盖</button>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>测试结果</h3>
+            <div id="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>日志输出</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('log');
+        let resultElement = document.getElementById('result');
+        
+        // 模拟节点属性
+        let nodeProperties = {
+            filePath: '',
+            fileType: 'auto',
+            fileEncoding: 'auto',
+            outputVariable: 'fileContent',
+            includeMetadata: false,
+            extractImages: false,
+            extractTables: false
+        };
+        
+        // 默认配置
+        const defaultConfig = {
+            filePath: '',
+            fileType: 'auto',
+            fileEncoding: 'auto',
+            outputVariable: 'fileContent',
+            includeMetadata: false,
+            extractImages: false,
+            extractTables: false
+        };
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logElement.innerHTML += logEntry + '\n';
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(logEntry);
+        }
+        
+        function clearLog() {
+            logElement.innerHTML = '';
+        }
+        
+        function updateResult(message, type = 'info') {
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            resultElement.innerHTML = `<div style="padding: 10px; border-radius: 5px; background: ${className === 'success' ? '#d4edda' : className === 'error' ? '#f8d7da' : '#d1ecf1'}; color: ${className === 'success' ? '#155724' : className === 'error' ? '#721c24' : '#0c5460'}; border: 1px solid ${className === 'success' ? '#c3e6cb' : className === 'error' ? '#f5c6cb' : '#bee5eb'};">${message}</div>`;
+        }
+        
+        // 测试路径持久性
+        function testPathPersistence() {
+            log('开始测试路径持久性...');
+            
+            // 设置一个文件路径
+            const testPath = 'C:\\Users\\Test\\Documents\\test.pdf';
+            nodeProperties.filePath = testPath;
+            
+            // 模拟组件重新渲染（使用旧的方式）
+            const oldWay = { ...defaultConfig, ...nodeProperties };
+            log(`旧方式合并结果: ${JSON.stringify(oldWay)}`);
+            
+            // 模拟组件重新渲染（使用新的方式）
+            const newWay = {
+                ...defaultConfig,
+                ...nodeProperties,
+                filePath: nodeProperties.filePath || defaultConfig.filePath
+            };
+            log(`新方式合并结果: ${JSON.stringify(newWay)}`);
+            
+            if (oldWay.filePath === testPath && newWay.filePath === testPath) {
+                log('✅ 两种方式都能保持路径', 'success');
+                updateResult('✅ 路径持久性测试通过', 'success');
+            } else {
+                log('❌ 路径被意外清空', 'error');
+                updateResult('❌ 路径持久性测试失败', 'error');
+            }
+        }
+        
+        // 测试属性更新
+        function testPropertyUpdate() {
+            log('开始测试属性更新...');
+            
+            // 设置初始值
+            nodeProperties.filePath = 'C:\\test\\initial.pdf';
+            nodeProperties.fileType = 'pdf';
+            
+            log(`初始属性: ${JSON.stringify(nodeProperties)}`);
+            
+            // 模拟属性更新
+            const updatedProperties = {
+                ...nodeProperties,
+                fileType: 'txt',
+                fileEncoding: 'utf8'
+            };
+            
+            // 使用新的合并方式
+            const merged = {
+                ...defaultConfig,
+                ...updatedProperties
+            };
+            
+            log(`更新后属性: ${JSON.stringify(merged)}`);
+            
+            if (merged.filePath === 'C:\\test\\initial.pdf' && merged.fileType === 'txt') {
+                log('✅ 属性更新正确，路径未丢失', 'success');
+                updateResult('✅ 属性更新测试通过', 'success');
+            } else {
+                log('❌ 属性更新失败', 'error');
+                updateResult('❌ 属性更新测试失败', 'error');
+            }
+        }
+        
+        // 测试默认值覆盖
+        function testDefaultValueOverride() {
+            log('开始测试默认值覆盖...');
+            
+            // 清空属性
+            nodeProperties = {};
+            
+            // 模拟组件初始化
+            const initialized = {
+                ...defaultConfig,
+                ...nodeProperties
+            };
+            
+            log(`空属性初始化结果: ${JSON.stringify(initialized)}`);
+            
+            // 设置一个路径
+            nodeProperties.filePath = 'C:\\test\\new.pdf';
+            
+            // 再次合并
+            const afterSet = {
+                ...defaultConfig,
+                ...nodeProperties
+            };
+            
+            log(`设置路径后结果: ${JSON.stringify(afterSet)}`);
+            
+            if (afterSet.filePath === 'C:\\test\\new.pdf') {
+                log('✅ 默认值覆盖测试通过', 'success');
+                updateResult('✅ 默认值覆盖测试通过', 'success');
+            } else {
+                log('❌ 默认值覆盖测试失败', 'error');
+                updateResult('❌ 默认值覆盖测试失败', 'error');
+            }
+        }
+        
+        // 页面加载完成后的初始化
+        window.onload = function() {
+            log('页面加载完成，开始初始化测试...');
+            log('模拟节点属性:', JSON.stringify(nodeProperties));
+            log('默认配置:', JSON.stringify(defaultConfig));
+        };
+    </script>
+</body>
+</html>

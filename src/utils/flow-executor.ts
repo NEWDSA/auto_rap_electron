@@ -22,7 +22,7 @@ export class FlowExecutor {
 
   async stop() {
     if (!this.isRunning) return
-    
+
     try {
       const result = await window.electronAPI.invoke('flow:stop')
       if (!result.success) {
@@ -35,4 +35,4 @@ export class FlowExecutor {
       this.isRunning = false
     }
   }
-} 
+}

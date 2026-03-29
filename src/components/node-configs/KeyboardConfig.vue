@@ -14,10 +14,7 @@
     <!-- 按键操作 -->
     <template v-if="props.node.properties.keyboardActionType === 'press'">
       <el-form-item label="选择按键">
-        <el-select
-          v-model="props.node.properties.key"
-          @change="handleChange('key')"
-        >
+        <el-select v-model="props.node.properties.key" @change="handleChange('key')">
           <el-option-group label="常用按键">
             <el-option label="Enter" value="Enter" />
             <el-option label="Tab" value="Tab" />
@@ -60,12 +57,9 @@
       </el-form-item>
 
       <el-form-item label="主按键">
-        <el-select
-          v-model="props.node.properties.key"
-          @change="handleChange('key')"
-        >
+        <el-select v-model="props.node.properties.key" @change="handleChange('key')">
           <el-option-group label="字母">
-            <el-option 
+            <el-option
               v-for="letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')"
               :key="letter"
               :label="letter"
@@ -73,12 +67,7 @@
             />
           </el-option-group>
           <el-option-group label="数字">
-            <el-option 
-              v-for="num in '0123456789'.split('')"
-              :key="num"
-              :label="num"
-              :value="num"
-            />
+            <el-option v-for="num in '0123456789'.split('')" :key="num" :label="num" :value="num" />
           </el-option-group>
         </el-select>
       </el-form-item>
@@ -105,10 +94,7 @@
         </el-checkbox>
       </el-form-item>
 
-      <el-form-item 
-        label="输入延迟(毫秒)" 
-        v-if="props.node.properties.simulateTyping"
-      >
+      <el-form-item v-if="props.node.properties.simulateTyping" label="输入延迟(毫秒)">
         <el-input-number
           v-model="props.node.properties.typingDelay"
           :min="50"
@@ -129,10 +115,7 @@
       </el-checkbox>
     </el-form-item>
 
-    <el-form-item 
-      label="等待时间(毫秒)" 
-      v-if="props.node.properties.waitAfterInput"
-    >
+    <el-form-item v-if="props.node.properties.waitAfterInput" label="等待时间(毫秒)">
       <el-input-number
         v-model="props.node.properties.waitTimeout"
         :min="0"
@@ -145,55 +128,55 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+  import { onMounted } from 'vue'
 
-interface Props {
-  node: {
-    properties: {
-      keyboardActionType?: 'press' | 'combination' | 'type'
-      key?: string
-      modifiers?: string[]
-      text?: string
-      simulateTyping?: boolean
-      typingDelay?: number
-      waitAfterInput?: boolean
-      waitTimeout?: number
+  interface Props {
+    node: {
+      properties: {
+        keyboardActionType?: 'press' | 'combination' | 'type'
+        key?: string
+        modifiers?: string[]
+        text?: string
+        simulateTyping?: boolean
+        typingDelay?: number
+        waitAfterInput?: boolean
+        waitTimeout?: number
+      }
     }
   }
-}
 
-const props = defineProps<Props>()
-const emit = defineEmits<{
-  (e: 'update', key: string): void
-}>()
+  const props = defineProps<Props>()
+  const emit = defineEmits<{
+    (e: 'update', key: string): void
+  }>()
 
-const handleChange = (key: string) => {
-  emit('update', key)
-}
+  const handleChange = (key: string) => {
+    emit('update', key)
+  }
 
-// 初始化默认值
-onMounted(() => {
-  if (!props.node.properties.keyboardActionType) {
-    props.node.properties.keyboardActionType = 'press'
-  }
-  if (!props.node.properties.modifiers) {
-    props.node.properties.modifiers = []
-  }
-  if (!props.node.properties.typingDelay) {
-    props.node.properties.typingDelay = 100
-  }
-  if (!props.node.properties.waitTimeout) {
-    props.node.properties.waitTimeout = 1000
-  }
-})
+  // 初始化默认值
+  onMounted(() => {
+    if (!props.node.properties.keyboardActionType) {
+      props.node.properties.keyboardActionType = 'press'
+    }
+    if (!props.node.properties.modifiers) {
+      props.node.properties.modifiers = []
+    }
+    if (!props.node.properties.typingDelay) {
+      props.node.properties.typingDelay = 100
+    }
+    if (!props.node.properties.waitTimeout) {
+      props.node.properties.waitTimeout = 1000
+    }
+  })
 </script>
 
 <style scoped>
-.keyboard-config {
-  .el-checkbox-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .keyboard-config {
+    .el-checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
   }
-}
-</style> 
+</style>

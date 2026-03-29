@@ -1,10 +1,7 @@
 <template>
   <div class="extract-config">
     <el-form-item label="提取类型">
-      <el-select
-        v-model="props.node.properties.extractType"
-        @change="handleChange('extractType')"
-      >
+      <el-select v-model="props.node.properties.extractType" @change="handleChange('extractType')">
         <el-option label="提取文本" value="text" />
         <el-option label="提取属性" value="attribute" />
         <el-option label="提取HTML" value="html" />
@@ -33,10 +30,7 @@
         @change="handleChange('selector')"
       >
         <template #append>
-          <el-button 
-            :type="isSelecting ? 'primary' : 'default'"
-            @click="openBrowserForSelect"
-          >
+          <el-button :type="isSelecting ? 'primary' : 'default'" @click="openBrowserForSelect">
             选择元素
           </el-button>
         </template>
@@ -59,7 +53,7 @@
           <el-option label="自定义..." value="custom" />
         </el-select>
       </el-form-item>
-      
+
       <el-form-item v-if="props.node.properties.attributeName === 'data'" label="数据属性名">
         <el-input
           v-model="props.node.properties.customDataAttribute"
@@ -116,10 +110,7 @@
       </el-form-item>
 
       <el-form-item>
-        <el-checkbox
-          v-model="props.node.properties.hasHeader"
-          @change="handleChange('hasHeader')"
-        >
+        <el-checkbox v-model="props.node.properties.hasHeader" @change="handleChange('hasHeader')">
           包含表头
         </el-checkbox>
       </el-form-item>
@@ -172,10 +163,7 @@
 
     <template v-if="props.node.properties.enableFilter">
       <el-form-item label="过滤类型">
-        <el-select
-          v-model="props.node.properties.filterType"
-          @change="handleChange('filterType')"
-        >
+        <el-select v-model="props.node.properties.filterType" @change="handleChange('filterType')">
           <el-option label="正则表达式" value="regex" />
           <el-option label="包含文本" value="contains" />
           <el-option label="不包含文本" value="notContains" />
@@ -203,7 +191,9 @@
         </el-checkbox>
       </el-form-item>
 
-      <el-form-item v-if="['greaterThan', 'lessThan'].includes(props.node.properties.filterType || '')">
+      <el-form-item
+        v-if="['greaterThan', 'lessThan'].includes(props.node.properties.filterType || '')"
+      >
         <el-checkbox
           v-model="props.node.properties.filterNumeric"
           @change="handleChange('filterNumeric')"
@@ -232,199 +222,198 @@
     </el-form-item>
 
     <el-form-item>
-      <el-button type="primary" @click="handlePreview">
-        预览提取结果
-      </el-button>
+      <el-button type="primary" @click="handlePreview"> 预览提取结果 </el-button>
     </el-form-item>
 
     <!-- 预览结果对话框 -->
-    <el-dialog
-      v-model="previewDialogVisible"
-      title="提取结果预览"
-      width="60%"
-    >
+    <el-dialog v-model="previewDialogVisible" title="提取结果预览" width="60%">
       <pre class="preview-content">{{ previewContent }}</pre>
       <template #footer>
         <el-button @click="previewDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleCopyPreview">
-          复制内容
-        </el-button>
+        <el-button type="primary" @click="handleCopyPreview"> 复制内容 </el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { FlowNode } from '@/types/node-config'
-import { ipcRenderer } from '@/utils/electron'
-import { ElMessage } from 'element-plus'
-import { InfoFilled } from '@element-plus/icons-vue'
+  import { ref } from 'vue'
+  import type { FlowNode } from '@/types/node-config'
+  import { ipcRenderer } from '@/utils/electron'
+  import { ElMessage } from 'element-plus'
+  import { InfoFilled } from '@element-plus/icons-vue'
 
-interface Props {
-  node: {
-    properties: {
-      extractType?: 'text' | 'attribute' | 'html' | 'table' | 'list'
-      selectorType?: 'css' | 'xpath' | 'id' | 'class' | 'name'
-      selector?: string
-      attributeName?: string
-      customAttributeName?: string
-      customDataAttribute?: string
-      headerSelector?: string
-      rowSelector?: string
-      cellSelector?: string
-      hasHeader?: boolean
-      extractInnerHTML?: boolean
-      variableName?: string
-      trimContent?: boolean
-      enableFilter?: boolean
-      filterType?: 'regex' | 'contains' | 'notContains' | 'equals' | 'notEquals' | 'greaterThan' | 'lessThan'
-      filterValue?: string
-      filterCaseInsensitive?: boolean
-      filterNumeric?: boolean
-      waitForVisible?: boolean
-      timeout?: number
-    }
-  }
-}
-
-const props = defineProps<Props>()
-const emit = defineEmits<{
-  (e: 'update', key: string): void
-}>()
-
-const isSelecting = ref(false)
-const previewDialogVisible = ref(false)
-const previewContent = ref('')
-
-const handleChange = (key: string) => {
-  emit('update', key)
-}
-
-const openBrowserForSelect = async (selectorType?: string) => {
-  try {
-    isSelecting.value = true
-    ElMessage.info('请在浏览器中选择要提取的元素')
-    
-    const result = await ipcRenderer.invoke('element:startPicker')
-    if (result) {
-      if (selectorType) {
-        // 更新特定的选择器
-        switch (selectorType) {
-          case 'headerSelector':
-            props.node.properties.headerSelector = result.selector
-            handleChange('headerSelector')
-            break
-          case 'rowSelector':
-            props.node.properties.rowSelector = result.selector
-            handleChange('rowSelector')
-            break
-          case 'cellSelector':
-            props.node.properties.cellSelector = result.selector
-            handleChange('cellSelector')
-            break
-          default:
-            props.node.properties.selector = result.selector
-            props.node.properties.selectorType = result.selectorType
-            handleChange('selector')
-        }
-      } else {
-        // 默认更新主选择器
-        props.node.properties.selector = result.selector
-        props.node.properties.selectorType = result.selectorType
-        handleChange('selector')
+  interface Props {
+    node: {
+      properties: {
+        extractType?: 'text' | 'attribute' | 'html' | 'table' | 'list'
+        selectorType?: 'css' | 'xpath' | 'id' | 'class' | 'name'
+        selector?: string
+        attributeName?: string
+        customAttributeName?: string
+        customDataAttribute?: string
+        headerSelector?: string
+        rowSelector?: string
+        cellSelector?: string
+        hasHeader?: boolean
+        extractInnerHTML?: boolean
+        variableName?: string
+        trimContent?: boolean
+        enableFilter?: boolean
+        filterType?:
+          | 'regex'
+          | 'contains'
+          | 'notContains'
+          | 'equals'
+          | 'notEquals'
+          | 'greaterThan'
+          | 'lessThan'
+        filterValue?: string
+        filterCaseInsensitive?: boolean
+        filterNumeric?: boolean
+        waitForVisible?: boolean
+        timeout?: number
       }
-      ElMessage.success('元素选择成功')
     }
-  } catch (error) {
-    console.error('选择元素失败:', error)
-    ElMessage.error(error.message || '选择元素失败')
-  } finally {
-    isSelecting.value = false
   }
-}
 
-const handlePreview = async () => {
-  try {
-    // 创建一个新的对象，只包含必要的属性
-    const extractProperties = {
-      selector: props.node.properties.selector,
-      selectorType: props.node.properties.selectorType,
-      extractType: props.node.properties.extractType,
-      attributeName: props.node.properties.attributeName,
-      headerSelector: props.node.properties.headerSelector,
-      rowSelector: props.node.properties.rowSelector,
-      cellSelector: props.node.properties.cellSelector,
-      hasHeader: props.node.properties.hasHeader,
-      extractInnerHTML: props.node.properties.extractInnerHTML,
-      trimContent: props.node.properties.trimContent,
-      enableFilter: props.node.properties.enableFilter,
-      filterType: props.node.properties.filterType,
-      filterValue: props.node.properties.filterValue,
-      filterCaseInsensitive: props.node.properties.filterCaseInsensitive,
-      filterNumeric: props.node.properties.filterNumeric
+  const props = defineProps<Props>()
+  const emit = defineEmits<{
+    (e: 'update', key: string): void
+  }>()
+
+  const isSelecting = ref(false)
+  const previewDialogVisible = ref(false)
+  const previewContent = ref('')
+
+  const handleChange = (key: string) => {
+    emit('update', key)
+  }
+
+  const openBrowserForSelect = async (selectorType?: string) => {
+    try {
+      isSelecting.value = true
+      ElMessage.info('请在浏览器中选择要提取的元素')
+
+      const result = await ipcRenderer.invoke('element:startPicker')
+      if (result) {
+        if (selectorType) {
+          // 更新特定的选择器
+          switch (selectorType) {
+            case 'headerSelector':
+              props.node.properties.headerSelector = result.selector
+              handleChange('headerSelector')
+              break
+            case 'rowSelector':
+              props.node.properties.rowSelector = result.selector
+              handleChange('rowSelector')
+              break
+            case 'cellSelector':
+              props.node.properties.cellSelector = result.selector
+              handleChange('cellSelector')
+              break
+            default:
+              props.node.properties.selector = result.selector
+              props.node.properties.selectorType = result.selectorType
+              handleChange('selector')
+          }
+        } else {
+          // 默认更新主选择器
+          props.node.properties.selector = result.selector
+          props.node.properties.selectorType = result.selectorType
+          handleChange('selector')
+        }
+        ElMessage.success('元素选择成功')
+      }
+    } catch (error) {
+      console.error('选择元素失败:', error)
+      ElMessage.error(error.message || '选择元素失败')
+    } finally {
+      isSelecting.value = false
     }
+  }
 
-    const result = await ipcRenderer.invoke('extract:preview', extractProperties)
-    
-    if (result === null || result === undefined) {
-      previewContent.value = '未提取到内容'
-    } else {
-      previewContent.value = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+  const handlePreview = async () => {
+    try {
+      // 创建一个新的对象，只包含必要的属性
+      const extractProperties = {
+        selector: props.node.properties.selector,
+        selectorType: props.node.properties.selectorType,
+        extractType: props.node.properties.extractType,
+        attributeName: props.node.properties.attributeName,
+        headerSelector: props.node.properties.headerSelector,
+        rowSelector: props.node.properties.rowSelector,
+        cellSelector: props.node.properties.cellSelector,
+        hasHeader: props.node.properties.hasHeader,
+        extractInnerHTML: props.node.properties.extractInnerHTML,
+        trimContent: props.node.properties.trimContent,
+        enableFilter: props.node.properties.enableFilter,
+        filterType: props.node.properties.filterType,
+        filterValue: props.node.properties.filterValue,
+        filterCaseInsensitive: props.node.properties.filterCaseInsensitive,
+        filterNumeric: props.node.properties.filterNumeric,
+      }
+
+      const result = await ipcRenderer.invoke('extract:preview', extractProperties)
+
+      if (result === null || result === undefined) {
+        previewContent.value = '未提取到内容'
+      } else {
+        previewContent.value = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+      }
+
+      previewDialogVisible.value = true
+    } catch (error: any) {
+      console.error('预览失败:', error)
+      ElMessage.error(error.message || '预览失败，请检查选择器是否正确')
     }
-    
-    previewDialogVisible.value = true
-  } catch (error: any) {
-    console.error('预览失败:', error)
-    ElMessage.error(error.message || '预览失败，请检查选择器是否正确')
   }
-}
 
-const handleCopyPreview = async () => {
-  try {
-    await navigator.clipboard.writeText(previewContent.value)
-    ElMessage.success('已复制到剪贴板')
-  } catch (error) {
-    console.error('复制失败:', error)
-    ElMessage.error('复制失败')
+  const handleCopyPreview = async () => {
+    try {
+      await navigator.clipboard.writeText(previewContent.value)
+      ElMessage.success('已复制到剪贴板')
+    } catch (error) {
+      console.error('复制失败:', error)
+      ElMessage.error('复制失败')
+    }
   }
-}
 
-const getFilterPlaceholder = (filterType?: string) => {
-  switch (filterType) {
-    case 'regex':
-      return '请输入正则表达式'
-    case 'contains':
-    case 'notContains':
-      return '请输入要匹配的文本'
-    case 'equals':
-    case 'notEquals':
-      return '请输入要比较的值'
-    case 'greaterThan':
-    case 'lessThan':
-      return '请输入比较值'
-    default:
-      return '请输入过滤条件'
+  const getFilterPlaceholder = (filterType?: string) => {
+    switch (filterType) {
+      case 'regex':
+        return '请输入正则表达式'
+      case 'contains':
+      case 'notContains':
+        return '请输入要匹配的文本'
+      case 'equals':
+      case 'notEquals':
+        return '请输入要比较的值'
+      case 'greaterThan':
+      case 'lessThan':
+        return '请输入比较值'
+      default:
+        return '请输入过滤条件'
+    }
   }
-}
 
-// 初始化默认值
-if (!props.node.properties.timeout) {
-  props.node.properties.timeout = 30
-}
-if (props.node.properties.waitForVisible === undefined) {
-  props.node.properties.waitForVisible = true
-}
+  // 初始化默认值
+  if (!props.node.properties.timeout) {
+    props.node.properties.timeout = 30
+  }
+  if (props.node.properties.waitForVisible === undefined) {
+    props.node.properties.waitForVisible = true
+  }
 </script>
 
 <style scoped>
-.preview-content {
-  max-height: 400px;
-  overflow: auto;
-  padding: 1rem;
-  background: #f5f7fa;
-  border-radius: 4px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-</style> 
+  .preview-content {
+    max-height: 400px;
+    overflow: auto;
+    padding: 1rem;
+    background: #f5f7fa;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+</style>

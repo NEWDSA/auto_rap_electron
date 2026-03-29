@@ -5,12 +5,12 @@
 </template>
 
 <script setup lang="ts">
-// 无需额外逻辑
+  // 无需额外逻辑
 </script>
 
 <style lang="postcss" scoped>
-.page-container {
-  @apply h-full w-full p-6;
-  overflow: auto;
-}
-</style> 
+  .page-container {
+    @apply h-full w-full p-6;
+    overflow: auto;
+  }
+</style>

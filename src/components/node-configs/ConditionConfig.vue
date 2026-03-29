@@ -1,17 +1,11 @@
 <template>
   <div class="condition-config">
     <el-form-item label="选择器">
-      <el-input
-        v-model="props.node.properties.selector"
-        @change="handleChange('selector')"
-      />
+      <el-input v-model="props.node.properties.selector" @change="handleChange('selector')" />
     </el-form-item>
 
     <el-form-item label="条件类型">
-      <el-select
-        v-model="props.node.properties.condition"
-        @change="handleChange('condition')"
-      >
+      <el-select v-model="props.node.properties.condition" @change="handleChange('condition')">
         <el-option label="元素存在" value="exists" />
         <el-option label="元素不存在" value="notExists" />
         <el-option label="元素可见" value="visible" />
@@ -25,12 +19,15 @@
       </el-select>
     </el-form-item>
 
-    <template v-if="['textContains', 'textNotContains', 'textEquals', 'textNotEquals'].includes(props.node.properties.condition || '')">
+    <template
+      v-if="
+        ['textContains', 'textNotContains', 'textEquals', 'textNotEquals'].includes(
+          props.node.properties.condition || ''
+        )
+      "
+    >
       <el-form-item label="文本值">
-        <el-input
-          v-model="props.node.properties.value"
-          @change="handleChange('value')"
-        />
+        <el-input v-model="props.node.properties.value" @change="handleChange('value')" />
       </el-form-item>
     </template>
 
@@ -46,23 +43,33 @@
 </template>
 
 <script setup lang="ts">
-interface Props {
-  node: {
-    properties: {
-      selector?: string
-      condition?: 'exists' | 'notExists' | 'visible' | 'notVisible' | 'clickable' | 'notClickable' | 'textContains' | 'textNotContains' | 'textEquals' | 'textNotEquals'
-      value?: string
-      timeout?: number
+  interface Props {
+    node: {
+      properties: {
+        selector?: string
+        condition?:
+          | 'exists'
+          | 'notExists'
+          | 'visible'
+          | 'notVisible'
+          | 'clickable'
+          | 'notClickable'
+          | 'textContains'
+          | 'textNotContains'
+          | 'textEquals'
+          | 'textNotEquals'
+        value?: string
+        timeout?: number
+      }
     }
   }
-}
 
-const props = defineProps<Props>()
-const emit = defineEmits<{
-  (e: 'update', key: string): void
-}>()
+  const props = defineProps<Props>()
+  const emit = defineEmits<{
+    (e: 'update', key: string): void
+  }>()
 
-const handleChange = (key: string) => {
-  emit('update', key)
-}
-</script> 
+  const handleChange = (key: string) => {
+    emit('update', key)
+  }
+</script>
