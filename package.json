@@ -57,8 +57,7 @@
     "say": "^0.16.0",
     "uuid": "^11.1.0",
     "vue": "3.4.0",
-    "vue-router": "4.2.0",
-    "yt-dlp-exec": "^1.0.2"
+    "vue-router": "4.2.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
@@ -90,5 +89,6 @@
     "vite-plugin-electron-renderer": "^0.14.5",
     "vitest": "1.2.1",
     "vue-tsc": "1.8.27"
-  }
+  },
+  "packageManager": "pnpm@11.1.1+sha512.d1fdf5f73c617b64fa1a56a81c3c8dfe0e966e33a6010aa256b517ae77be21d93e05affc0de1a83b0e4f29d569f68b446ae8f068cd7247c0bb3df0fb4d7bdf9a"
 }

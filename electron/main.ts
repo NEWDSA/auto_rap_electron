@@ -469,6 +469,36 @@ ipcMain.handle('open-browser', async (_, options) => {
   }
 })
 
+// ==================== Session 管理 IPC ====================
+
+ipcMain.handle('session:save', async (_, name: string) => {
+  try {
+    const filePath = await automationController.saveSession(name)
+    return { success: true, path: filePath, count: JSON.parse(fs.readFileSync(filePath, 'utf-8')).length }
+  } catch (e: any) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('session:list', async () => {
+  try {
+    const sessions = automationController.listSessions()
+    return { success: true, sessions }
+  } catch (e: any) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('session:delete', async (_, name: string) => {
+  try {
+    automationController.deleteSession(name)
+    return { success: true }
+  } catch (e: any) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('session:load', async (_, name: string) => {
+  try {
+    const count = await automationController.loadSession(name)
+    return { success: true, count }
+  } catch (e: any) { return { success: false, error: e.message } }
+})
+
 // 添加全屏切换处理程序
 ipcMain.handle('window:toggleFullscreen', () => {
   const win = BrowserWindow.getFocusedWindow()

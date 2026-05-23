@@ -1,7 +1,13 @@
-import { BrowserWindow, WebContents, Notification } from 'electron'
+import { BrowserWindow, WebContents, Notification, session } from 'electron'
 import type { FlowNode, NodeProperties } from '../src/types/node-config'
 import { ExportUtils } from '../src/utils/exportUtils'
 import { EmailService } from './email-service'
+import path from 'path'
+import fs from 'fs'
+import { app } from 'electron'
+
+// Session 持久化分区名称（Cookie/localStorage 自动存到磁盘）
+const PERSIST_PARTITION = 'persist:automation'
 
 export class AutomationController {
   private browserWindow: BrowserWindow | null = null
@@ -19,6 +25,66 @@ export class AutomationController {
   private pickerLock: boolean = false
   private pickerPromiseState: 'pending' | 'resolved' | 'rejected' | null = null
   private lastExtractedData: any = null
+
+  // ==================== Session 管理 ====================
+
+  /** 获取 Session 存储目录 */
+  private getSessionsDir(): string {
+    const dir = path.join(app.getPath('userData'), 'sessions')
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    return dir
+  }
+
+  /** 获取自动化用的持久化 Session 对象 */
+  getAutomationSession() {
+    return session.fromPartition(PERSIST_PARTITION)
+  }
+
+  /** 保存当前 Session 的 Cookie 到指定名称的文件 */
+  async saveSession(name: string): Promise<string> {
+    const ses = this.getAutomationSession()
+    const cookies = await ses.cookies.get({})
+    const filePath = path.join(this.getSessionsDir(), `${name}.json`)
+    fs.writeFileSync(filePath, JSON.stringify(cookies, null, 2), 'utf-8')
+    return filePath
+  }
+
+  /** 列出所有已保存的 Session */
+  listSessions(): Array<{ name: string; size: number; updatedAt: string }> {
+    const dir = this.getSessionsDir()
+    const result: Array<{ name: string; size: number; updatedAt: string }> = []
+    if (!fs.existsSync(dir)) return result
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.json')) continue
+      const fp = path.join(dir, file)
+      const stat = fs.statSync(fp)
+      result.push({ name: file.replace('.json', ''), size: stat.size, updatedAt: stat.mtime.toISOString() })
+    }
+    return result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }
+
+  /** 删除指定 Session 文件 */
+  deleteSession(name: string): void {
+    const fp = path.join(this.getSessionsDir(), `${name}.json`)
+    if (fs.existsSync(fp)) fs.unlinkSync(fp)
+  }
+
+  /** 从文件加载 Cookie 到当前 Session */
+  async loadSession(name: string): Promise<number> {
+    const fp = path.join(this.getSessionsDir(), `${name}.json`)
+    if (!fs.existsSync(fp)) throw new Error(`Session "${name}" 不存在`)
+    const cookies = JSON.parse(fs.readFileSync(fp, 'utf-8'))
+    const ses = this.getAutomationSession()
+    let count = 0
+    for (const cookie of cookies) {
+      try {
+        const url = cookie.secure ? `https://${cookie.domain.replace(/^\./, '')}` : `http://${cookie.domain.replace(/^\./, '')}`
+        await ses.cookies.set({ url, ...cookie })
+        count++
+      } catch {}
+    }
+    return count
+  }
 
   // 获取当前页面内容
   getCurrentWebContents() {
@@ -94,16 +160,26 @@ export class AutomationController {
       this.browserWindow = new BrowserWindow({
         width: options.width || 1280,
         height: options.height || 800,
-        show: !options.headless, // headless 模式下不显示窗口
+        show: !options.headless,
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
-          webSecurity: false, // 允许跨域请求
-          allowRunningInsecureContent: true
+          webSecurity: false,
+          allowRunningInsecureContent: true,
+          session: session.fromPartition(PERSIST_PARTITION),  // ← Cookie 自动持久化
         }
       })
 
       this.webContents = this.browserWindow.webContents
+
+      // 元素拾取场景下，自动打开被控浏览器 DevTools，方便查看真正的 renderer console 报错
+      if (options.forElementPicker) {
+        try {
+          this.webContents.openDevTools({ mode: 'detach' })
+        } catch (e) {
+          // 忽略打开 devtools 的错误
+        }
+      }
 
       // 设置用户代理
       if (options.userAgent) {
@@ -119,14 +195,64 @@ export class AutomationController {
         }
       })
 
-      // 如果提供了URL，则导航到该页面
+      // 拦截 window.open()，将新页面加载到同一个 BrowserWindow 中
+      this.browserWindow.webContents.setWindowOpenHandler(({ url }) => {
+        console.log('[Window] 拦截到 window.open, 重定向 URL:', url)
+        // 异步导航到新URL
+        setImmediate(() => {
+          if (this.browserWindow && !this.browserWindow.isDestroyed()) {
+            this.browserWindow.loadURL(url).catch(e => {
+              console.error('[Window] 重定向加载失败:', e)
+            })
+          }
+        })
+        return { action: 'deny' }
+      })
+
+      // 如果提供了URL，则导航到该页面；否则至少加载一个有 document.body 的页面
       if (options.url) {
         await this.browserWindow.loadURL(options.url)
+      } else {
+        // 空的 data: URL 确保 document.body 存在，避免 executeJavaScript 注入失败
+        await this.browserWindow.loadURL('data:text/html,<html><body></body></html>')
+        await this.waitForWebContentsReady(this.browserWindow.webContents)
       }
     } catch (error) {
       console.error('初始化浏览器失败:', error)
       throw error
     }
+  }
+
+  private async waitForWebContentsReady(wc: WebContents, timeoutMs = 15000): Promise<void> {
+    if (!wc || wc.isDestroyed()) throw new Error('页面已关闭')
+    // 已经不在加载中则认为可用
+    if (!wc.isLoading()) return
+
+    await new Promise<void>((resolve, reject) => {
+      const onReady = () => {
+        cleanup()
+        resolve()
+      }
+      const onFail = (_event: any, code: number, desc: string) => {
+        cleanup()
+        reject(new Error(`页面加载失败(${code}): ${desc}`))
+      }
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error('等待页面加载超时'))
+      }, timeoutMs)
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        wc.removeListener('dom-ready', onReady)
+        wc.removeListener('did-finish-load', onReady)
+        wc.removeListener('did-fail-load', onFail as any)
+      }
+
+      wc.once('dom-ready', onReady)
+      wc.once('did-finish-load', onReady)
+      wc.once('did-fail-load', onFail as any)
+    })
   }
 
   async start(nodes: FlowNode[], taskId?: number) {
@@ -163,8 +289,9 @@ export class AutomationController {
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false, // 允许跨域请求
-            allowRunningInsecureContent: true
+            webSecurity: false,
+            allowRunningInsecureContent: true,
+            session: session.fromPartition(PERSIST_PARTITION),  // ← Cookie 自动持久化
           }
         });
 
@@ -189,6 +316,19 @@ export class AutomationController {
           this.webContents = null;
           this.isRunning = false;
         });
+
+        // 拦截 window.open()，将新页面加载到同一个 BrowserWindow 中
+        this.browserWindow.webContents.setWindowOpenHandler(({ url }) => {
+          console.log('[Window] 拦截到 window.open, 重定向 URL:', url)
+          setImmediate(() => {
+            if (this.browserWindow && !this.browserWindow.isDestroyed()) {
+              this.browserWindow.loadURL(url).catch(e => {
+                console.error('[Window] 重定向加载失败:', e)
+              })
+            }
+          })
+          return { action: 'deny' }
+        })
       } else {
         console.log('当前流程不需要浏览器窗口，直接执行节点');
       }
@@ -1198,28 +1338,38 @@ export class AutomationController {
           break
       }
 
-      console.log(`点击元素: 选择器类型=${currentSelectorType}, 原始选择器=${targetSelector}, 实际选择器=${actualSelector}`)
+      // 使用 JSON.stringify 安全转义，避免选择器中的引号破坏 JS 字符串
+      const safeSelector = JSON.stringify(actualSelector)
+      const safeIframe = properties.iframeSelector ? JSON.stringify(properties.iframeSelector) : 'null'
 
-      // 获取当前URL
-      const currentUrl = this.webContents.getURL()
-      
       // 使用 JavaScript 执行点击操作
       const clickResult = await this.webContents.executeJavaScript(`
         (function() {
-          const selector = '${actualSelector.replace(/'/g, "\\'")}';
-          const selectorType = '${currentSelectorType}';
+          const selector = ${safeSelector};
+          const iframeSelector = ${safeIframe};
+          
+          let doc = document;
+          
+          // 如果指定了 iframe 选择器，先进入 iframe
+          if (iframeSelector) {
+            const iframe = document.querySelector(iframeSelector);
+            if (!iframe) { throw new Error('未找到 iframe: ' + iframeSelector); }
+            doc = iframe.contentDocument || iframe.contentWindow.document;
+            if (!doc) { throw new Error('无法访问 iframe 内部文档（可能是跨域）'); }
+          }
           
           let element;
           
-          if (selectorType === 'xpath') {
-            const result = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          // XPath查询在根文档进行
+          if (selector.startsWith('//')) {
+            const result = document.evaluate(selector, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
             element = result.singleNodeValue;
           } else {
-            element = document.querySelector(selector);
+            element = doc.querySelector(selector);
           }
           
           if (!element) {
-            throw new Error('未找到可点击的元素');
+            throw new Error('未找到可点击的元素: ' + selector);
           }
           
           // 滚动到元素位置
@@ -1242,6 +1392,7 @@ export class AutomationController {
       
       // 如果需要等待加载
       if (waitAfterClick && clickTimeout) {
+        const webContents = this.webContents
         await new Promise((resolve) => {
           const timeoutId = setTimeout(() => {
             console.warn('等待页面加载超时，继续执行');
@@ -1249,9 +1400,10 @@ export class AutomationController {
           }, clickTimeout * 1000);
           
           // 监听页面加载完成或URL变化
+          const currentUrl = webContents.getURL()
           const checkComplete = () => {
-            if (this.webContents) {
-              const newUrl = this.webContents.getURL();
+            if (webContents) {
+              const newUrl = webContents.getURL()
               if (newUrl !== currentUrl) {
                 clearTimeout(timeoutId);
                 resolve(void 0);
@@ -1259,14 +1411,14 @@ export class AutomationController {
             }
           };
           
-          if (this.webContents) {
-            this.webContents.once('did-finish-load', () => {
+          if (webContents) {
+            webContents.once('did-finish-load', () => {
               clearTimeout(timeoutId);
               resolve(void 0);
             });
             
-            this.webContents.once('did-navigate', checkComplete);
-            this.webContents.once('did-navigate-in-page', checkComplete);
+            webContents.once('did-navigate', checkComplete);
+            webContents.once('did-navigate-in-page', checkComplete);
           }
         });
       }
@@ -2349,7 +2501,7 @@ export class AutomationController {
     }
   }
 
-  async startElementPicker(): Promise<{ selector: string; selectorType: string }> {
+  async startElementPicker(): Promise<{ selector: string; selectorType: string; iframeSelector?: string }> {
     if (!this.webContents) throw new Error('浏览器未启动')
     if (this.webContents.isDestroyed()) throw new Error('页面已关闭')
     if (this.pickerPromiseState === 'pending') throw new Error('已有正在进行的元素选择')
@@ -2360,290 +2512,145 @@ export class AutomationController {
 
     try {
       if (!this.webContents.isDestroyed()) {
-        await this.webContents.executeJavaScript(`
-          if (window._elementPicker) {
-            window._elementPicker.disable()
-          }
-        `)
+        await this.waitForWebContentsReady(this.webContents)
 
-        await this.webContents.executeJavaScript(`
-          window._elementPicker = {
-            enabled: false,
-            hoveredElement: null,
-            originalOutline: '',
-            originalCursor: '',
-            
-            enable() {
-              if (this.enabled) return
-              this.enabled = true
-              this.originalCursor = document.body.style.cursor
-              document.body.style.cursor = 'pointer'
-              
-              // 使用事件委托，将事件监听器绑定到document上
-              document.addEventListener('mouseover', this.handleMouseOver.bind(this))
-              document.addEventListener('mouseout', this.handleMouseOut.bind(this))
-              document.addEventListener('click', this.handleClick.bind(this), true)
-            },
-            
-            disable() {
-              if (!this.enabled) return
-              this.enabled = false
-              document.body.style.cursor = this.originalCursor
-              
-              // 移除事件监听器
-              document.removeEventListener('mouseover', this.handleMouseOver.bind(this))
-              document.removeEventListener('mouseout', this.handleMouseOut.bind(this))
-              document.removeEventListener('click', this.handleClick.bind(this), true)
-              
-              // 清理高亮效果
-              if (this.hoveredElement) {
-                this.hoveredElement.style.outline = this.originalOutline
-                this.hoveredElement = null
-              }
-            },
-            
-            handleMouseOver(event: MouseEvent) {
-              if (!this.enabled) return
-              const element = event.target as HTMLElement
-              if (!element || element === document.body || element === document.documentElement) return
-              
-              if (this.hoveredElement) {
-                this.hoveredElement.style.outline = this.originalOutline
-              }
-              this.hoveredElement = element
-              this.originalOutline = element.style.outline
-              element.style.outline = '2px solid #409eff'
-              element.style.outlineOffset = '1px'
-            },
-            
-            handleMouseOut(event: MouseEvent) {
-              if (!this.enabled) return
-              const element = event.target as HTMLElement
-              if (!element) return
-              
-              if (this.hoveredElement === element) {
-                element.style.outline = this.originalOutline
-                element.style.outlineOffset = ''
-                this.hoveredElement = null
-              }
-            },
-            
-            handleClick(event: MouseEvent) {
-              if (!this.enabled) return
-              event.preventDefault()
-              event.stopPropagation()
-              event.stopImmediatePropagation()
-              
-              const element = event.target as HTMLElement
-              if (!element || element === document.body || element === document.documentElement) return
-              
-              const result = this.generateSelector(element)
-              
-              // 清理高亮效果
-              if (this.hoveredElement) {
-                this.hoveredElement.style.outline = this.originalOutline
-                this.hoveredElement = null
-              }
-              
-              this.disable()
-              
-              // 发送选择结果
-              window.postMessage({ 
-                type: 'ELEMENT_SELECTED', 
-                selector: result.selector,
-                selectorType: result.selectorType 
-              }, '*')
-            },
-            
-            generateSelector(element: HTMLElement): { selector: string, selectorType: string } {
-              let selector = ''
-              let selectorType = 'css'
-              
-              // 尝试使用 id
-              if (element.id) {
-                selector = element.id
-                selectorType = 'id'
-                // 验证选择器是否唯一且正确匹配当前元素
-                const foundElement = document.getElementById(selector)
-                if (foundElement === element) {
-                  return { selector, selectorType }
-                }
-              }
-              
-              // 尝试使用 name 属性
-              const name = element.getAttribute('name')
-              if (name) {
-                selector = name
-                selectorType = 'name'
-                // 验证选择器是否唯一且正确匹配当前元素
-                const elements = document.getElementsByName(selector)
-                if (elements.length === 1 && elements[0] === element) {
-                  return { selector, selectorType }
-                }
-              }
+        // ── 注入主页面拾取脚本 ──
+        const mainJs = [
+          '(function(){',
+          'try{',
+          '  var w=window;var d=document;',
+          '  function clean(){',
+          '    if(w.__pk){',
+          '      d.removeEventListener("mouseover",w.__pk.mo);',
+          '      d.removeEventListener("mouseout",w.__pk.mu);',
+          '      d.removeEventListener("click",w.__pk.mc,true);',
+          '      d.removeEventListener("keydown",w.__pk.kd)',
+          '    }',
+          '  }',
+          '  clean();w.__pk={};',
+          '  w.__pk.er=null;',
+          '  if(d.body){w.__pk.cur=d.body.style.cursor;d.body.style.cursor="pointer"}',
+          // ---- 生成选择器辅助函数 ----
+          '  function genSel(t){',
+          '    if(!t||t===d.body||t===d.documentElement)return"";',
+          '    if(t.id)return t.id;',
+          '    var p=[];var c=t;var n=t.parentElement;',
+          '    while(n){',
+          '      var sib=[].slice.call(n.children);',
+          '      var idx=sib.indexOf(c)+1;',
+          '      var tag=c.tagName.toLowerCase();',
+          '      if(c.id){p.unshift("#"+c.id);break}',
+          '      p.unshift(tag+":nth-child("+idx+")");',
+          '      c=n;n=n.parentElement;if(p.length>10)break',
+          '    }',
+          '    return p.join(" > ")',
+          '  }',
+          // ---- 处理 iframe 消息（iframe 内部发上来的） ----
+          '  w.__pk.ifrHdl=function(e){',
+          '    if(e.data&&e.data.type==="__PK_IFRAME_SELECT"){',
+          '      clean();',
+          '      w.__pk.ifrSel=e.data.iframeSel;',
+          '      w.__pk.ifrInner=e.data.innerSel;',
+          '      w.__pk.sendResult(e.data.innerSel,"css",e.data.iframeSel)',
+          '    }',
+          '  };',
+          '  w.addEventListener("message",w.__pk.ifrHdl);',
+          // ---- 鼠标悬停 ----
+          '  w.__pk.mo=function(e){',
+          '    var t=e.target;',
+          '    if(!t||t===d.body||t===d.documentElement)return;',
+          '    if(w.__pk.hv){',
+          '      w.__pk.hv.style.outline=w.__pk.ol||"";',
+          '      w.__pk.hv.style.outlineOffset=""',
+          '    }',
+          '    w.__pk.hv=t;w.__pk.ol=t.style.outline;',
+          '    t.style.outline="2px solid #409eff";t.style.outlineOffset="1px"',
+          '  };',
+          // ---- 鼠标移出 ----
+          '  w.__pk.mu=function(e){',
+          '    var t=e.target;if(!t)return;',
+          '    if(w.__pk.hv===t){',
+          '      t.style.outline=w.__pk.ol||"";t.style.outlineOffset="";w.__pk.hv=null',
+          '    }',
+          '  };',
+          // ---- 点击主页面元素（注意：不阻止传播，让页面原本的事件处理器能正常执行） ----
+          '  w.__pk.mc=function(e){',
+          '    e.preventDefault();',
+          '    var t=e.target;',
+          '    if(!t||t===d.body||t===d.documentElement)return;',
+          '    var sel=genSel(t);if(!sel)return;',
+          '    var st="css";if(t.id){sel=t.id;st="id"}',
+          '    clean();w.__pk.sendResult(sel,st,"")',
+          '  };',
+          // ---- ESC键取消 ----
+          '  w.__pk.kd=function(e){',
+          '    if(e.key==="Escape"){clean();w.__pk.sendCancel()}',
+          '  };',
+          // ---- 发送结果 ----
+          '  w.__pk.sendResult=function(s,t,f){',
+          '    d.removeEventListener("mouseover",w.__pk.mo);d.removeEventListener("mouseout",w.__pk.mu);d.removeEventListener("click",w.__pk.mc,true);d.removeEventListener("keydown",w.__pk.kd);',
+          '    w.removeEventListener("message",w.__pk.ifrHdl);',
+          '    if(d.body)d.body.style.cursor=w.__pk.cur||"";',
+          '    if(w.__pk.hv){w.__pk.hv.style.outline=w.__pk.ol||"";w.__pk.hv.style.outlineOffset="";w.__pk.hv=null}',
+          '    w.postMessage({type:"ELEMENT_SELECTED",selector:s,selectorType:t,iframeSelector:f},"*")',
+          '  };',
+          '  w.__pk.sendCancel=function(){',
+          '    d.removeEventListener("mouseover",w.__pk.mo);d.removeEventListener("mouseout",w.__pk.mu);d.removeEventListener("click",w.__pk.mc,true);d.removeEventListener("keydown",w.__pk.kd);',
+          '    w.removeEventListener("message",w.__pk.ifrHdl);',
+          '    w.postMessage({type:"ELEMENT_SELECTED_CANCELLED"},"*")',
+          '  };',
+          '  d.addEventListener("mouseover",w.__pk.mo);',
+          '  d.addEventListener("mouseout",w.__pk.mu);',
+          '  d.addEventListener("click",w.__pk.mc,true);',
+          '  d.addEventListener("keydown",w.__pk.kd);',
+          // ---- 遍历同源 iframe，注入子拾取器 ----
+          '  var ifrs=d.querySelectorAll("iframe");',
+          '  for(var i=0;i<ifrs.length;i++){(function(){',
+          '    var f=ifrs[i];',
+          '    try{',
+          '      var fd=f.contentDocument||f.contentWindow.document;',
+          '      if(!fd||fd===d)return;',
+          '      var fs=genSel(f);',
+          '      if(!fd.body)return;',
+          '      fd.body.style.cursor="pointer";',
+          '      fd.addEventListener("click",function(e){',
+          '        e.preventDefault();',
+          '        var t=e.target;',
+          '        if(!t||t===fd.body||t===fd.documentElement)return;',
+          '        var s=t.id||function(el){var p=[];while(el&&el.parentElement){var sib=[].slice.call(el.parentElement.children);var idx=sib.indexOf(el)+1;p.unshift(el.tagName.toLowerCase()+":nth-child("+idx+")");el=el.parentElement;if(p.length>15)break}return p.join(" > ")}(t);',
+          '        if(!s)return;',
+          '        if(t.id)s=t.id;',
+          '        w.postMessage({type:"__PK_IFRAME_SELECT",innerSel:s,iframeSel:fs},"*")',
+          '      },true)',
+          '    }catch(e){w.__pk.er=e.message}',
+          '  })()}',
+          '}catch(e){w.__pk.er=e.message}',
+          '})()'
+        ].join('\n')
 
-              // 尝试使用精确的 class 组合
-              if (element.className && typeof element.className === 'string') {
-                const classes = element.className.trim().split(/\s+/).filter(Boolean)
-                if (classes.length > 0) {
-                  selector = classes.join(' ')
-                  selectorType = 'class'
-                  // 验证选择器是否唯一且正确匹配当前元素
-                  const elements = document.getElementsByClassName(selector)
-                  if (elements.length === 1 && elements[0] === element) {
-                    return { selector, selectorType }
-                  }
+        await this.webContents.executeJavaScript(mainJs)
 
-                  // 如果类组合不唯一，尝试与标签名组合
-                  const tagWithClass = element.tagName.toLowerCase() + '.' + classes.join('.')
-                  const elementsWithTag = document.querySelectorAll(tagWithClass)
-                  if (elementsWithTag.length === 1 && elementsWithTag[0] === element) {
-                    return { selector: tagWithClass, selectorType: 'css' }
-                  }
-                }
-              }
+        // ── 第二步：等待用户选择 ──
+        const waitJs = [
+          'new Promise(function(r,j){',
+          '  if(window.__pk&&window.__pk.er){j(new Error(window.__pk.er));return}',
+          '  var tid=null;var done=false;',
+          '  function hdl(e){',
+          '    if(!e.data)return;',
+          '    if(e.data.type==="ELEMENT_SELECTED"){',
+          '      window.removeEventListener("message",hdl);clearTimeout(tid);done=true;',
+          '      r({selector:e.data.selector,selectorType:e.data.selectorType,iframeSelector:e.data.iframeSelector||""})',
+          '    }',
+          '    if(e.data.type==="ELEMENT_SELECTED_CANCELLED"){',
+          '      window.removeEventListener("message",hdl);clearTimeout(tid);j(new Error("已取消"))',
+          '    }',
+          '  }',
+          '  window.addEventListener("message",hdl);',
+          '  tid=setTimeout(function(){if(!done){window.removeEventListener("message",hdl);j(new Error("选择元素超时"))}},300000)',
+          '})'
+        ].join('\n')
 
-              // 如果上述方法都无法唯一定位元素，使用更精确的组合选择器
-              const tag = element.tagName.toLowerCase()
-              let parent = element.parentElement
-              let path = []
-              let current = element
-
-              // 构建元素路径
-              while (parent) {
-                // 获取当前元素在同级中的索引
-                const siblings = Array.from(parent.children)
-                const index = siblings.indexOf(current) + 1
-                
-                // 尝试使用 id
-                  if (current.id) {
-                    path.unshift('#' + current.id)
-                    break
-                  }
-                
-                // 尝试使用 class
-                if (current.className && typeof current.className === 'string') {
-                  const classes = current.className.trim().split(/\s+/).filter(Boolean)
-                  if (classes.length > 0) {
-                    const classSelector = tag + classes.map(c => '.' + c).join('') + ':nth-child(' + index + ')'
-                    const elements = document.querySelectorAll(classSelector)
-                    if (elements.length === 1 && elements[0] === current) {
-                      path.unshift(classSelector)
-                      break
-                    }
-                  }
-                }
-                
-                // 使用标签名和索引
-                path.unshift(tag + ':nth-child(' + index + ')')
-                
-                // 更新循环变量
-                current = parent
-                parent = parent.parentElement
-                
-                // 防止无限循环
-                if (path.length > 10) break
-              }
-              
-              selector = path.join(' > ')
-              selectorType = 'css'
-              
-              // 验证最终选择器
-              const finalElement = document.querySelector(selector)
-              if (finalElement !== element) {
-                // 如果验证失败，使用完整路径
-                const fullPath = this.getFullPath(element)
-                return { selector: fullPath, selectorType: 'css' }
-              }
-              
-              return { selector, selectorType }
-            },
-            
-            getFullPath(element: HTMLElement): string {
-              const path = []
-              let current = element
-              
-              while (current && current.nodeType === Node.ELEMENT_NODE) {
-                let selector = current.tagName.toLowerCase()
-                
-                if (current.id) {
-                  selector = '#' + current.id
-                  path.unshift(selector)
-                  break
-                } else {
-                  let nth = 1
-                  let sibling = current
-                  
-                  while (sibling = sibling.previousElementSibling as HTMLElement) {
-                    if (sibling.tagName === current.tagName) nth++
-                  }
-                  
-                  if (nth > 1) selector += ':nth-of-type(' + nth + ')'
-                }
-                
-                path.unshift(selector)
-                current = current.parentElement as HTMLElement
-              }
-              
-              return path.join(' > ')
-            }
-          }
-          
-          window._elementPicker.enable()
-
-          // 添加键盘事件监听，按ESC键取消选择
-          document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape' && window._elementPicker) {
-              window._elementPicker.disable()
-              window.postMessage({ 
-                type: 'ELEMENT_SELECTED_CANCELLED'
-              }, '*')
-            }
-          })
-        `)
-
-        const result = await this.webContents.executeJavaScript(`
-          return new Promise((resolve, reject) => {
-            let timeoutId = null
-            let isResolved = false
-
-            const handler = (event) => {
-              if (event.data?.type === 'ELEMENT_SELECTED') {
-                cleanup()
-                isResolved = true
-                resolve({
-                  selector: event.data.selector,
-                  selectorType: event.data.selectorType
-                })
-              } else if (event.data?.type === 'ELEMENT_SELECTED_CANCELLED') {
-                cleanup()
-                reject(new Error('已取消选择'))
-              }
-            }
-
-            const cleanup = () => {
-              window.removeEventListener('message', handler)
-              if (timeoutId !== null) {
-                clearTimeout(timeoutId)
-                timeoutId = null
-              }
-              if (window._elementPicker) {
-                window._elementPicker.disable()
-              }
-            }
-
-            window.addEventListener('message', handler)
-            window.addEventListener('unload', cleanup, { once: true })
-
-            timeoutId = window.setTimeout(() => {
-              if (!isResolved) {
-                cleanup()
-                reject(new Error('选择元素超时'))
-              }
-            }, 300000)
-          })
-        `)
-
+        const result = await this.webContents.executeJavaScript(waitJs)
         this.pickerPromiseState = 'resolved'
         return result
       } else {
@@ -2654,11 +2661,9 @@ export class AutomationController {
       this.pickerPromiseState = 'rejected'
       try {
         if (this.webContents && !this.webContents.isDestroyed()) {
-          await this.webContents.executeJavaScript(`
-            if (window._elementPicker) {
-              window._elementPicker.disable()
-            }
-          `)
+          await this.webContents.executeJavaScript(
+            '(function(){if(window.__pk){document.removeEventListener("mouseover",window.__pk.mo);document.removeEventListener("mouseout",window.__pk.mu);document.removeEventListener("click",window.__pk.mc,true);document.removeEventListener("keydown",window.__pk.kd);if(window.__pk.hv){window.__pk.hv.style.outline=window.__pk.ol||"";window.__pk.hv.style.outlineOffset="";window.__pk.hv=null};if(document.body)document.body.style.cursor=window.__pk.cur||""}})()'
+          )
         }
       } catch (cleanupError) {
         // 忽略清理错误
@@ -2715,91 +2720,134 @@ export class AutomationController {
       
       console.log(`输入文本: 选择器类型=${selectorType}, 原始选择器=${selector}, 实际选择器=${actualSelector}`)
 
+      const safeSelector = JSON.stringify(actualSelector)
+      const safeIframe = properties.iframeSelector ? JSON.stringify(properties.iframeSelector) : 'null'
+      const safeText = JSON.stringify(text)
+
       // 检查元素是否存在
       const elementExists = await this.webContents.executeJavaScript(`
-        document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
-      `) !== null
-      
+        (function() {
+          const sel = ${safeSelector};
+          const ifr = ${safeIframe};
+          let d = document;
+          if (ifr) { const f = document.querySelector(ifr); if (f) { d = f.contentDocument || f.contentWindow.document; } }
+          return d ? !!d.querySelector(sel) : false;
+        })()
+      `)
+
       if (!elementExists) {
         console.log('未找到元素，尝试使用备用选择器');
-        
-        // 如果有元素ID，尝试使用ID
         if (selector.includes('id=') || selector.includes('#')) {
           const idSelector = selector.includes('#') ? selector : `#${selector.replace('id=', '')}`;
           actualSelector = idSelector;
         }
-        
-        // 检查是否找到元素
+        // 再次检查
+        const safeSelector2 = JSON.stringify(actualSelector)
         const fallbackExists = await this.webContents.executeJavaScript(`
-          document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
-        `) !== null
-        
+          (function() {
+            const sel = ${safeSelector2};
+            const ifr = ${safeIframe};
+            let d = document;
+            if (ifr) { const f = document.querySelector(ifr); if (f) { d = f.contentDocument || f.contentWindow.document; } }
+            return d ? !!d.querySelector(sel) : false;
+          })()
+        `)
         if (!fallbackExists) {
-          // 最后尝试使用input标签
           actualSelector = 'input';
           console.log('尝试定位任何输入框');
         }
       }
-      
+
       // 等待元素可见并滚动到视图中
       console.log('等待元素可见并滚动到视图中...');
       await this.webContents.executeJavaScript(`
-        const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          return true
-        }
-        return false
+        (function() {
+          const sel = ${JSON.stringify(actualSelector)};
+          const ifr = ${safeIframe};
+          let d = document;
+          if (ifr) { const f = document.querySelector(ifr); if (f) { d = f.contentDocument || f.contentWindow.document; } }
+          if (!d) return false;
+          const el = d.querySelector(sel);
+          if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return true; }
+          return false;
+        })()
       `)
 
       // 如果需要清除原有内容
       if (clearFirst) {
         console.log('清除输入框现有内容...');
         await this.webContents.executeJavaScript(`
-          const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
-          if (element) {
-            element.focus()
-            element.select()
-            element.value = ''
-          }
+          (function() {
+            const sel = ${JSON.stringify(actualSelector)};
+            const ifr = ${safeIframe};
+            let d = document;
+            if (ifr) { const f = document.querySelector(ifr); if (f) { d = f.contentDocument || f.contentWindow.document; } }
+            if (!d) return;
+            const el = d.querySelector(sel);
+            if (el) { el.focus(); el.select(); el.value = ''; }
+          })()
         `)
       }
 
       // 输入文本
       console.log(`使用${simulateTyping ? '模拟输入' : '直接填充'}方式输入文本...`);
       if (simulateTyping) {
-        // 模拟逐字符输入
         await this.webContents.executeJavaScript(`
-          const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
-          if (element) {
-            element.focus()
-            const text = '${text.replace(/'/g, "\\'").replace(/\\/g, '\\\\')}';
-            let currentValue = element.value || '';
-            
-            for (let i = 0; i < text.length; i++) {
-              currentValue += text[i];
-              element.value = currentValue;
-              
-              // 触发输入事件
-              element.dispatchEvent(new Event('input', { bubbles: true }));
+          (async function() {
+            const sel = ${JSON.stringify(actualSelector)};
+            const ifr = ${safeIframe};
+            let d = document;
+            if (ifr) { const f = document.querySelector(ifr); if (f) { d = f.contentDocument || f.contentWindow.document; } }
+            if (!d) throw new Error('无法访问文档');
+            const element = d.querySelector(sel);
+            if (!element) throw new Error('元素未找到');
+            element.focus();
+            const text = ${safeText};
+            const delay = ${typingDelay || 50};
+            if (element.isContentEditable) {
+              element.innerText = '';
+              for (let i = 0; i < text.length; i++) {
+                element.innerText += text[i];
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                await new Promise(r => setTimeout(r, delay));
+              }
+            } else {
+              element.value = '';
+              for (let i = 0; i < text.length; i++) {
+                element.value += text[i];
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                await new Promise(r => setTimeout(r, delay));
+              }
               element.dispatchEvent(new Event('change', { bubbles: true }));
-              
-              // 模拟输入延迟
-              await new Promise(resolve => setTimeout(resolve, ${typingDelay || 50}));
             }
-          }
+          })()
         `)
       } else {
+        // 智能填充：区分 input/textarea 和 contenteditable
         await this.webContents.executeJavaScript(`
-          const element = document.querySelector('${actualSelector.replace(/'/g, "\\'")}')
-          if (element) {
-            element.focus()
-            element.value = '${text.replace(/'/g, "\\'").replace(/\\/g, '\\\\')}'
-            
-            // 触发输入事件
-            element.dispatchEvent(new Event('input', { bubbles: true }))
-            element.dispatchEvent(new Event('change', { bubbles: true }))
-          }
+          (function() {
+            const sel = ${JSON.stringify(actualSelector)};
+            const ifr = ${safeIframe};
+            let d = document;
+            if (ifr) { const f = document.querySelector(ifr); if (f) { d = f.contentDocument || f.contentWindow.document; } }
+            if (!d) throw new Error('无法访问文档');
+            const element = d.querySelector(sel);
+            if (!element) throw new Error('元素未找到');
+            element.focus();
+            const text = ${safeText};
+            if (element.isContentEditable || element.tagName === 'DIV') {
+              element.innerText = text;
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+            } else if (element.tagName === 'TEXTAREA') {
+              element.value = text;
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+              element.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+              element.value = text;
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+              element.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          })()
         `)
       }
 

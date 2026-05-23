@@ -24,6 +24,13 @@
       </el-input>
     </el-form-item>
 
+    <el-form-item v-if="node.properties.iframeSelector" label="所在 iframe">
+      <el-tag type="warning" closable @close="node.properties.iframeSelector = ''; handleChange()">
+        {{ node.properties.iframeSelector }}
+      </el-tag>
+      <div class="text-xs text-gray-400 ml-1">该元素位于 iframe 内部</div>
+    </el-form-item>
+
     <el-form-item label="输入内容">
       <el-input
         v-model="node.properties.text"
@@ -106,6 +113,9 @@
       if (result) {
         props.node.properties.selector = result.selector
         props.node.properties.selectorType = result.selectorType
+        if (result.iframeSelector) {
+          props.node.properties.iframeSelector = result.iframeSelector
+        }
         handleChange()
         ElMessage.success('元素选择成功')
       }

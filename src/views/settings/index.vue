@@ -478,6 +478,19 @@
           </div>
         </div>
       </el-tab-pane>
+
+      <!-- Session 管理 -->
+      <el-tab-pane>
+        <template #label>
+          <div class="flex items-center space-x-2">
+            <el-icon><Key /></el-icon>
+            <span>登录态</span>
+          </div>
+        </template>
+        <div class="tab-content-container">
+          <SessionManager />
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 底部操作栏 -->
@@ -496,6 +509,7 @@
   import { Key } from '@element-plus/icons-vue'
   import { licenseService } from '@/services/license-service'
   import { systemControl } from '@/services/system-control'
+  import SessionManager from '@/components/SessionManager.vue'
 
   // 设置数据
   const settings = ref({

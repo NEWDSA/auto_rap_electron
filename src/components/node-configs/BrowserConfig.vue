@@ -27,6 +27,27 @@
       <div class="text-xs text-gray-400 mt-1">支持自动补全 https:// 前缀</div>
     </el-form-item>
 
+    <!-- Session 选择（仅 goto 时显示） -->
+    <el-form-item v-if="localActionType === 'goto'" label="登录态 Session">
+      <el-select
+        v-model="node.properties.sessionName"
+        clearable
+        placeholder="默认 / 或选择已保存的 Session"
+        @change="handleChange('sessionName')"
+      >
+        <el-option label="默认（继承当前登录态）" value="" />
+        <el-option
+          v-for="s in savedSessions"
+          :key="s.name"
+          :label="s.name"
+          :value="s.name"
+        />
+      </el-select>
+      <div class="text-xs text-gray-400 mt-1">
+        加载指定 Session 的 Cookie；默认使用当前浏览器的登录态
+      </div>
+    </el-form-item>
+
     <el-form-item v-if="localActionType === 'click'" label="点击设置">
       <div class="space-y-2">
         <el-input
@@ -130,6 +151,7 @@
   const localWaitForLoad = ref(props.node.properties.waitForLoad)
   const localUrl = ref(props.node.properties.url || '')
   const localActionType = ref(props.node.properties.actionType || 'goto')
+  const savedSessions = ref<Array<{ name: string; size: number; updatedAt: string }>>([])
 
   // 监听属性变化
   watch(
@@ -259,5 +281,15 @@
     if (!props.node.properties.clickTimeout) {
       props.node.properties.clickTimeout = 5
     }
+
+    // 加载已保存的 Session 列表
+    loadSavedSessions()
   })
+
+  const loadSavedSessions = async () => {
+    try {
+      const r = await (window as any).electronAPI.invoke('session:list')
+      if (r.success) savedSessions.value = r.sessions
+    } catch {}
+  }
 </script>

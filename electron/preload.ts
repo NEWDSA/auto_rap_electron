@@ -62,6 +62,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'video:download',
       // 外部链接打开
       'open-external',
+      // Session 管理通道
+      'session:save',
+      'session:list',
+      'session:delete',
+      'session:load',
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

@@ -1,0 +1,7 @@
+allowBuilds:
+  aws-sdk: true
+  core-js: true
+  electron: true
+  esbuild: true
+  vue-demi: true
+  yt-dlp-exec: true

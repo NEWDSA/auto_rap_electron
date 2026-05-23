@@ -79,6 +79,7 @@ export interface NodeProperties {
   // 点击节点属性
   selector?: string
   selectorType?: 'css' | 'xpath' | 'id' | 'class' | 'name'
+  iframeSelector?: string // 当元素在 iframe 内时，这个字段存 iframe 的选择器
   waitAfterClick?: boolean
   clickTimeout?: number
 
