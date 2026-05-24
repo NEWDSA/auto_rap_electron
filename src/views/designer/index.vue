@@ -1039,23 +1039,12 @@ const handleDrop = (event: DragEvent) => {
     targetEdge = edges.find(edge => edge.id === highlightedEdgeId) || null
   }
 
-  // 如果在连接线上，将节点放在鼠标位置的投影点
+  // 如果在连接线上，将新节点放在源节点正下方 100px 对齐，避免沿短边中点导致重叠
   if (targetEdge) {
     const sourceNode = nodes.find(n => n.id === targetEdge.sourceNodeId)
-    const targetNode = nodes.find(n => n.id === targetEdge.targetNodeId)
-    
-    if (sourceNode && targetNode) {
-      // 计算鼠标在连接线上的投影点
-      const projectionPoint = getProjectionPointOnLine(
-        offsetX,
-        offsetY,
-        sourceNode.x,
-        sourceNode.y,
-        targetNode.x,
-        targetNode.y
-      )
-      nodeConfig.x = projectionPoint.x
-      nodeConfig.y = projectionPoint.y
+    if (sourceNode) {
+      nodeConfig.x = sourceNode.x
+      nodeConfig.y = sourceNode.y + 100
     }
   }
 
@@ -1065,98 +1054,63 @@ const handleDrop = (event: DragEvent) => {
     customNodeCount.value++
   }
   
-  // 自动延伸连接线：将新节点插入到开始和结束节点之间
-  // 重新获取最新的图数据
+  // 自动连接：参考 n8n 模式，分两种情况处理
   const latestGraphData = lf.value.getGraphData()
   const latestNodes = latestGraphData.nodes || []
   const latestEdges = latestGraphData.edges || []
   const startNode2 = latestNodes.find((n: any) => n.type === 'start')
   const endNode2 = latestNodes.find((n: any) => n.type === 'end')
-  
+
   if (startNode2 && endNode2 && newNode.id !== startNode2.id && newNode.id !== endNode2.id) {
-    // 计算中间节点的数量（不包括开始、结束和新添加的节点）
-    const middleNodes = latestNodes.filter((n: any) => 
-      n.type !== 'start' && 
-      n.type !== 'end' && 
-      n.id !== newNode.id
-    )
-    
-    // 根据节点数量自动调整位置
-    const nodeSpacing = 100 // 节点之间的间距
-    const startY = startNode2.y
-    
-    // 将新节点放置在合适的位置
-    const newNodeY = startY + (middleNodes.length + 1) * nodeSpacing
-    // 更新节点模型的位置（包括文本）
-    const nodeModel = lf.value.getNodeModelById(newNode.id)
-    if (nodeModel) {
-      nodeModel.x = startNode2.x
-      nodeModel.y = newNodeY
-      // 更新文本位置
-      if (nodeModel.text) {
-        nodeModel.text.x = startNode2.x
-        nodeModel.text.y = newNodeY
-      }
-    }
-    
-    // 移动结束节点到更下方
-    const endNodeY = startY + (middleNodes.length + 2) * nodeSpacing
-    const endNodeModel = lf.value.getNodeModelById(endNode2.id)
-    if (endNodeModel) {
-      endNodeModel.x = startNode2.x
-      endNodeModel.y = endNodeY
-      // 更新文本位置
-      if (endNodeModel.text) {
-        endNodeModel.text.x = startNode2.x
-        endNodeModel.text.y = endNodeY
-      }
-    }
-    
-    // 查找开始到结束的直接连接
-    const directEdge = latestEdges.find((e: any) => 
-      e.sourceNodeId === startNode2.id && e.targetNodeId === endNode2.id
-    )
-    
-    if (directEdge) {
-      // 删除直接连接
-      lf.value.deleteEdge(directEdge.id)
-      
-      // 创建新的连接：start -> newNode -> end
+
+    if (targetEdge && targetEdge.sourceNodeId && targetEdge.targetNodeId) {
+      // ── 场景A：拖拽到连接线上 → 断边，在中间插入节点 ──
+      lf.value.deleteEdge(targetEdge.id)
       lf.value.addEdge({
         type: 'polyline',
-        sourceNodeId: startNode2.id,
+        sourceNodeId: targetEdge.sourceNodeId,
         targetNodeId: newNode.id,
         properties: {}
       })
-      
+      lf.value.addEdge({
+        type: 'polyline',
+        sourceNodeId: newNode.id,
+        targetNodeId: targetEdge.targetNodeId,
+        properties: {}
+      })
+    } else {
+      // ── 场景B：拖拽到空白区域 → 追加到链末尾 ──
+      const toEndEdge = latestEdges.find((e: any) => e.targetNodeId === endNode2.id)
+      if (toEndEdge) {
+        lf.value.deleteEdge(toEndEdge.id)
+        lf.value.addEdge({
+          type: 'polyline',
+          sourceNodeId: toEndEdge.sourceNodeId,
+          targetNodeId: newNode.id,
+          properties: {}
+        })
+      }
       lf.value.addEdge({
         type: 'polyline',
         sourceNodeId: newNode.id,
         targetNodeId: endNode2.id,
         properties: {}
       })
-    } else {
-      // 如果没有直接连接，找到链的末端并连接
-      const toEndEdges = latestEdges.filter((e: any) => e.targetNodeId === endNode2.id)
-      if (toEndEdges.length > 0) {
-        // 删除原来到结束节点的边
-        lf.value.deleteEdge(toEndEdges[0].id)
-        const lastNodeId = toEndEdges[0].sourceNodeId
-        
-        // 连接 lastNode -> newNode -> end
-        lf.value.addEdge({
-          type: 'polyline',
-          sourceNodeId: lastNodeId,
-          targetNodeId: newNode.id,
-          properties: {}
-        })
-        
-        lf.value.addEdge({
-          type: 'polyline',
-          sourceNodeId: newNode.id,
-          targetNodeId: endNode2.id,
-          properties: {}
-        })
+    }
+
+    // ── 下游推开：插入节点后，把后面的节点整体下移，避免重叠 ──
+    if (targetEdge) {
+      const freshEdges = (lf.value.getGraphData().edges || []) as any[]
+      const sourceToTarget = new Map<string, string>()
+      for (const e of freshEdges) { sourceToTarget.set(e.sourceNodeId, e.targetNodeId) }
+      
+      let pushId: string | undefined = targetEdge.targetNodeId
+      const gModel = (lf.value as any).graphModel
+      while (pushId) {
+        if (gModel && typeof gModel.moveNode === 'function') {
+          gModel.moveNode(pushId, 0, 100)
+        }
+        pushId = sourceToTarget.get(pushId)
       }
     }
   }
