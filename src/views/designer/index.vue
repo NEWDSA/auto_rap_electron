@@ -450,10 +450,125 @@ const registerEvents = () => {
       type: 'warning'
     }).then(() => {
       lf.value?.deleteNode(data.data.id)
-      customNodeCount.value--
       selectedNode.value = null
       ElMessage.success('节点已删除')
     }).catch(() => {})
+  })
+
+  // 节点删除：用于快捷键/批量删除/右键删除后统一处理（重排、重连、计数）
+  lf.value.on('node:delete', (data: { data: any }) => {
+    console.log('[node:delete] 触发，被删节点:', data?.data?.id)
+
+    const nodeData = data?.data
+    if (!nodeData || nodeData.type === 'start' || nodeData.type === 'end') {
+      ElMessage.warning('开始节点和结束节点不能删除')
+      return
+    }
+
+    customNodeCount.value -= 1
+
+    // 删除完成后：分析断链 → 自动重连 → 上移下游节点
+    setTimeout(() => {
+      console.log('[node:delete setTimeout] 开始处理')
+      if (!lf.value) return
+      const gModel = (lf.value as any).graphModel
+      console.log('[node:delete setTimeout] gModel.moveNode 存在?', typeof gModel?.moveNode)
+      if (!gModel?.moveNode) return
+
+      const graphData = lf.value.getGraphData()
+      const nodes = graphData.nodes || []
+      const edges = (graphData.edges || []) as any[]
+      console.log('[node:delete setTimeout] 节点数:', nodes.length, '边数:', edges.length)
+
+      const startNode = nodes.find((n: any) => n.type === 'start')
+      const endNode = nodes.find((n: any) => n.type === 'end')
+      if (!startNode || !endNode) return
+
+      // 构建出入度：定位断链两端
+      const hasIncoming = new Set<string>(edges.map((e: any) => e.targetNodeId))
+      const hasOutgoing = new Set<string>(edges.map((e: any) => e.sourceNodeId))
+
+      const orphanedSources: string[] = []
+      const orphanedTargets: string[] = []
+      for (const node of nodes) {
+        if (node.type === 'start' || node.type === 'end') continue
+        if (hasIncoming.has(node.id) && !hasOutgoing.has(node.id)) orphanedSources.push(node.id)
+        if (hasOutgoing.has(node.id) && !hasIncoming.has(node.id)) orphanedTargets.push(node.id)
+      }
+
+      // 重连断链：前驱 → 后继（兜底连 start/end）
+      const pairCount = Math.min(orphanedSources.length, orphanedTargets.length)
+      for (let i = 0; i < pairCount; i++) {
+        lf.value.addEdge({
+          type: 'polyline',
+          sourceNodeId: orphanedSources[i],
+          targetNodeId: orphanedTargets[i],
+          properties: {}
+        })
+      }
+      for (let i = pairCount; i < orphanedSources.length; i++) {
+        lf.value.addEdge({
+          type: 'polyline',
+          sourceNodeId: orphanedSources[i],
+          targetNodeId: endNode.id,
+          properties: {}
+        })
+      }
+      for (let i = pairCount; i < orphanedTargets.length; i++) {
+        lf.value.addEdge({
+          type: 'polyline',
+          sourceNodeId: startNode.id,
+          targetNodeId: orphanedTargets[i],
+          properties: {}
+        })
+      }
+
+      // 从断链后继出发，下游整体上移 100px
+      const freshEdges = (lf.value.getGraphData().edges || []) as any[]
+      const sourceToTarget = new Map<string, string>()
+      for (const e of freshEdges) sourceToTarget.set(e.sourceNodeId, e.targetNodeId)
+
+      const moved = new Set<string>()
+      for (const targetId of orphanedTargets) {
+        let cur = targetId
+        while (cur && !moved.has(cur)) {
+          moved.add(cur)
+          gModel.moveNode(cur, 0, -100)
+          cur = sourceToTarget.get(cur)
+        }
+      }
+
+      // 边层级推到下层
+      for (const e of freshEdges) {
+        if (typeof gModel.setElementZIndex === 'function') {
+          gModel.setElementZIndex(e.id, 'bottom')
+        }
+      }
+    }, 50)
+  })
+
+  // 边删除：删除后检查 start→end 是否仍有路径（无路径则补一条直连）
+  lf.value.on('edge:delete', () => {
+    setTimeout(() => {
+      if (!lf.value) return
+      const graphData = lf.value.getGraphData()
+      const nodes = graphData.nodes || []
+      const edges = graphData.edges || []
+      const startNode = nodes.find((n: any) => n.type === 'start')
+      const endNode = nodes.find((n: any) => n.type === 'end')
+
+      if (startNode && endNode) {
+        const hasPath = checkPath(startNode.id, endNode.id, edges)
+        if (!hasPath) {
+          lf.value.addEdge({
+            type: 'polyline',
+            sourceNodeId: startNode.id,
+            targetNodeId: endNode.id,
+            properties: {}
+          })
+        }
+      }
+    }, 100)
   })
 }
 
@@ -1113,6 +1228,15 @@ const handleDrop = (event: DragEvent) => {
         pushId = sourceToTarget.get(pushId)
       }
     }
+
+    // ── 修复边层级：新增边在 SVG 最后导致盖住节点，推到下层 ──
+    const allEdgesNow = (lf.value.getGraphData().edges || []) as any[]
+    const gModel = (lf.value as any).graphModel
+    for (const e of allEdgesNow) {
+      if (gModel && typeof gModel.setElementZIndex === 'function') {
+        gModel.setElementZIndex(e.id, 'bottom')
+      }
+    }
   }
 
 }
@@ -1686,43 +1810,7 @@ const loadFlowFromDatabase = async (id: number) => {
   }
 }
 
-// 拦截批量删除和快捷键删除
-if (lf.value) {
-  lf.value.on('delete:node', (data: { nodes: any[] }) => {
-    // 过滤掉开始、结束节点
-    data.nodes = data.nodes.filter(n => n.type !== 'start' && n.type !== 'end')
-    if (data.nodes.length > 0) {
-      customNodeCount.value -= data.nodes.length
-    }
-    if (data.nodes.length === 0) {
-      ElMessage.warning('开始节点和结束节点不能删除')
-    }
-  })
-  lf.value.on('delete:edge', (data: { edges: any[] }) => {
-    // 允许删除连接线，但删除后检查是否需要重新连接开始和结束节点
-    setTimeout(() => {
-      if (!lf.value) return
-      const graphData = lf.value.getGraphData()
-      const nodes = graphData.nodes || []
-      const edges = graphData.edges || []
-      const startNode = nodes.find((n: any) => n.type === 'start')
-      const endNode = nodes.find((n: any) => n.type === 'end')
-      
-      // 如果开始和结束节点都存在，但它们之间没有任何路径，则添加直接连接
-      if (startNode && endNode) {
-        const hasPath = checkPath(startNode.id, endNode.id, edges)
-        if (!hasPath) {
-          lf.value.addEdge({
-            type: 'polyline',
-            sourceNodeId: startNode.id,
-            targetNodeId: endNode.id,
-            properties: {}
-          })
-        }
-      }
-    }, 100)
-  })
-}
+// 删除事件监听已统一放入 registerEvents()，保证在 lf 初始化后注册
 </script>
 
 <style lang="postcss" scoped>
